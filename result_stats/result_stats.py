@@ -191,7 +191,7 @@ def main():
     print('  thr = %f' % th_fpr)
     print('FPR at a given FNR:')
     print('===================')
-    print('  fpr = %f' % fnr_fpr)
+    print('  fpr = %f' % fpr_fnr)
     print('  fnr = %f' % fnr)
     print('  thr = %f' % th_fnr)
     print('FPR = FNR:')
