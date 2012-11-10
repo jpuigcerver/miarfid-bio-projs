@@ -142,7 +142,7 @@ def GetRocCurveArea(stats):
     for i in range(1, len(stats)):
         th, fp, fn = stats[i]
         fn = 1 - fn
-        a = a + (fpa - fp) * fn
+        a = a + (fpa - fp) * fn + (fpa - fp) * (fna - fn) / 2.0
         fpa, fna = fp, fn
     return a
 
