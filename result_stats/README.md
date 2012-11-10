@@ -16,10 +16,27 @@ Statistics
 * *D-Prime*, computes the separation between the positive and negative scores assuming a Normal distribution. The higher value, the better. http://en.wikipedia.org/wiki/D'
 
 Notes: 
-* *FPR* means _False Positive Rate_ (http://en.wikipedia.org/wiki/False_positive#Type_I_error)
-* *FNR* means _False Negative Rate_. (http://en.wikipedia.org/wiki/False_positive#Type_II_error)
+* *FPR* means [_False Positive Rate_](http://en.wikipedia.org/wiki/False_positive#Type_I_error).
+* *FNR* means [_False Negative Rate_](http://en.wikipedia.org/wiki/False_positive#Type_II_error).
+
 
 Requirements
 ------------
+
 * Python v2.7, this software was tested using Python 2.7. It may work with prior and posterior versions, but it is not guaranteed.
 * matplotlib, used to plot the ROC curve. http://matplotlib.org
+
+
+Help
+----
+`
+Usage:
+  ./result_stats.py --pos pfile --neg nfile [--fpr FPR] [--fnr FNR]
+
+Options:
+  --help (-h)         Shows this text
+  --pos (-p) pfile    Scores file of the possitive examples
+  --neg (-n) nfile    Scores file of the negative examples
+  --fpr FPR           Desired FPR (Range: 0..1. Default: 0.05)
+  --fnr FNR           Desired FNR (Range: 0..1. Default: 0.05)
+`

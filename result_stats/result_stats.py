@@ -70,47 +70,24 @@ def LoadScores(pos_filename, neg_filename):
     scores.sort()
     return scores
 
-def GetInterestingThresholds(scores):
-    """Given the sorted list of scores, get the different thresholds 
-    worth to try (removes repeated scores). An extra threshold is
-    in the beggining to make sure that there is an scenario with
-    FPR = 1.0, FNR = 0.0.
-    """
-    thresholds = [scores[0][0] - 1.0]
-    for (sc,c) in scores:
-        if len(thresholds) == 0 or sc != thresholds[-1]:
-            thresholds.append(sc)
-    return thresholds
-
-def GetStats(scores, th):
-    """Given the list of scores and a threshold, compute the
-    number of TP, FP, TN, FN and number of positive and negative examples.
-    """
-    tp, fp, tn, fn = 0, 0, 0, 0
-    for (sc,c) in scores:
-        if sc > th:
-            if c == '+':
-                tp = tp + 1
-            else:
-                fp = fp + 1
-        else:
-            if c == '+':
-                fn = fn + 1
-            else:
-                tn = tn + 1
-    p = tp + fn
-    n = tn + fp
-    return tp, fp, tn, fn, p, n
-        
-def GetStatsAllThresholds(scores):
+def GetStats(scores):
     """Compute the FPR and FNR for all the interesting thresholds."""
-    thresholds = GetInterestingThresholds(scores)
-    stats = []
-    for th in thresholds:
-        tp, fp, tn, fn, p, n = GetStats(scores, th)
-        fpr = fp / float(n)
-        fnr = fn / float(p)
-        stats.append((th, fpr, fnr))
+    p = len([c for sc, c in scores if c == '+'])
+    n = len([c for sc, c in scores if c == '-'])
+    fp, fn, fpr, fnr = n, 0, 1.0, 0.0
+    stats = [(scores[0][0] - 1.0, 1.0, 0.0)]
+    for i in range(0, len(scores)):
+        sc, c = scores[i]
+        if c == '-':
+            fp = fp - 1
+            fpr = fp / float(n)
+        else:
+            fn = fn + 1
+            fnr = fn / float(p)
+        if sc == stats[-1][0]:
+            stats[-1] = (sc, fpr, fnr)
+        else:
+            stats.append((sc, fpr, fnr))
     return stats
 
 def PlotRocCurve(stats):
@@ -188,7 +165,7 @@ def GetDScore(scores):
 def main():
     pos_filename, neg_filename, fpr, fnr = ParseArguments()
     scores = LoadScores(pos_filename, neg_filename)
-    stats = GetStatsAllThresholds(scores)
+    stats = GetStats(scores)
     th_fpr, fnr_fpr = GetFNAtGivenFP(stats, fpr)
     th_fnr, fpr_fnr = GetFPAtGivenFN(stats, fnr)
     th_diff, fpr_diff, fnr_diff = GetMinDiffFpFn(stats)
