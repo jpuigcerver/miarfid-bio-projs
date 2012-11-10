@@ -12,8 +12,8 @@ Statistics
 * **Area under ROC Curve**, single value indicating the quality of the classifier. The higher area, the better.
 * **FPR at a given FNR**, computes the threshild that gives the lowest FPR that satisfies that the FNR is lower or equal to the given one. The lower value, the better.
 * **FNR at a given FPR**, computes the threshold that gives the lowest FNR that satisfies that the FPR is lower or equal to the given one. The lower value, the better.
-* **FPR = FNR**, computes the threshold that gives the smallest difference between FPR and FNR. In case of many minimums, obtains the threshold that minimizes FPR + FNR.
-* [*D-Prime*](http://en.wikipedia.org/wiki/D'), computes the separation between the positive and negative scores assuming a Normal distribution. The higher value, the better.
+* **FPR = FNR**, computes the threshold that gives the smallest difference between FPR and FNR. In case of many minima, obtains the threshold that minimizes FPR + FNR.
+* [**D-Prime**](http://en.wikipedia.org/wiki/D'), computes the separation between the positive and negative scores assuming a Normal distribution. The higher value, the better.
 
 Notes: 
 * **FPR** means [*False Positive Rate*](http://en.wikipedia.org/wiki/False_positive#Type_I_error).
