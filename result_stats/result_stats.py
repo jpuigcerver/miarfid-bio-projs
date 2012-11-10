@@ -124,8 +124,8 @@ def GetFPAtGivenFN(stats, given_fn):
     for i in range(len(stats)-1, -1, -1):
         (th, fp, fn) = stats[i]
         if fn <= given_fn:
-            return th, fp
-    return (None, None)
+            return th, fp, fn
+    return None, None, None
 
 def GetFNAtGivenFP(stats, given_fp):
     """Returns the threshold and the smallest FNR which holds that
@@ -134,8 +134,8 @@ def GetFNAtGivenFP(stats, given_fp):
     for i in range(0, len(stats)):
         (th, fp, fn) = stats[i]
         if fp <= given_fp:
-            return th, fn
-    return None, None
+            return th, fp, fn
+    return None, None, None
 
 def GetMinDiffFpFn(stats):
     """Returns the threshold, FPR and FNR that minimizes the distance
@@ -181,18 +181,18 @@ def main():
     pos_filename, neg_filename, fpr, fnr = ParseArguments()
     scores = LoadScores(pos_filename, neg_filename)
     stats = GetStats(scores)
-    th_fpr, fnr_fpr = GetFNAtGivenFP(stats, fpr)
-    th_fnr, fpr_fnr = GetFPAtGivenFN(stats, fnr)
+    th_fpr, fpr_fpr, fnr_fpr = GetFNAtGivenFP(stats, fpr)
+    th_fnr, fpr_fnr, fnr_fnr = GetFPAtGivenFN(stats, fnr)
     th_diff, fpr_diff, fnr_diff = GetMinDiffFpFn(stats)
-    print('FNR at a given FPR:')
-    print('===================')
-    print('  fpr = %f' % fpr)
+    print('FNR at a given FPR <= %.4f:' % fpr)
+    print('=============================')
+    print('  fpr = %f' % fpr_fpr)
     print('  fnr = %f' % fnr_fpr)
     print('  thr = %f' % th_fpr)
-    print('FPR at a given FNR:')
-    print('===================')
+    print('FPR at a given FNR <= %.4f:' % fnr)
+    print('=============================')
     print('  fpr = %f' % fpr_fnr)
-    print('  fnr = %f' % fnr)
+    print('  fnr = %f' % fnr_fnr)
     print('  thr = %f' % th_fnr)
     print('FPR = FNR:')
     print('==========')
