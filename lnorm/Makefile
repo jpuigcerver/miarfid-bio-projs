@@ -1,4 +1,5 @@
-CXX_FLAGS=-std=c++11 -Wall -pedantic `Magick++-config  --cxxflags` -I./ -pg -g
+CXX_FLAGS=-std=c++0x -Wall -pedantic `Magick++-config  --cppflags` -I./ \
+-O3 -DNDEBUG
 LD_FLAGS=-lgflags -lglog `Magick++-config --ldflags --libs`
 BINARIES=lnorm
 

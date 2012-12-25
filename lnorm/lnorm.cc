@@ -4,16 +4,17 @@
 #include <google/gflags.h>
 #include <math.h>
 
+#include <algorithm>
+
 using namespace Magick;
 
 DEFINE_string(i, "-", "Input image. If none, use standard input.");
 DEFINE_string(o, "-", "Output image. If none, use standard output.");
-DEFINE_uint64(w, 5, "Window width for local normalization.");
-DEFINE_uint64(h, 5, "Window height for local normalization.");
+DEFINE_uint64(w, 5, "Window size for local normalization.");
 DEFINE_uint64(s, 1, "Pixel step.");
 
 
-void integral(const float* pxls, const size_t w, const size_t h, float* ii) {
+void integral(const double* pxls, const size_t w, const size_t h, double* ii) {
   CHECK_NOTNULL(pxls);
   CHECK_NOTNULL(ii);
   const size_t n = w * h;
@@ -36,114 +37,146 @@ void integral(const float* pxls, const size_t w, const size_t h, float* ii) {
   }
 }
 
-void sxx(float* x, const size_t n) {
+void dxx(double* x, const size_t n) {
   for (size_t i = 0; i < n; ++i) {
     x[i] *= x[i];
   }
 }
 
-void image_statistics(const float* im, size_t W, size_t H, bool color,
-                      size_t x0, size_t y0, size_t w, size_t h,
-                      float* mean, float* stddev) {
-  const size_t c = (color ? 3 : 1);
-  const size_t n = W * H;
-  float sum = 0.0f;
-  float sum_sq = 0.0f;
-  for (size_t k = 0; k < c; ++k) {
-    for (size_t y = y0; y < y0 + h; ++y) {
-      for (size_t x = x0; x < x0 + w; ++x) {
-        sum += im[k * n + y * W + x];
-        sum_sq += im[k * n + y * W + x] * im[k * n + y * W + x];
-      }
+void image_statistics(const double* im, size_t w, size_t h,
+                      size_t x0, size_t y0, double* mean, double* stddev) {
+  double sum = 0.0f;
+  double sum_sq = 0.0f;
+  for (size_t y = y0; y < y0 + FLAGS_w; ++y) {
+    for (size_t x = x0; x < x0 + FLAGS_w; ++x) {
+      sum += im[y * w + x];
+      sum_sq += im[y * w + x] * im[y * w + x];
     }
   }
-  *mean = sum / (w * h);
-  const float variance = sum_sq / (w * h) - *mean * *mean;
+  *mean = sum / (FLAGS_w * FLAGS_w);
+  const double variance = sum_sq / (FLAGS_w * FLAGS_w) - *mean * *mean;
   if ( variance < 0.0f ) {
     *stddev = 0.0;
   } else {
-    *stddev = sqrtf(variance);
+    *stddev = sqrt(variance);
   }
   CHECK_EQ(std::isnan(*mean), 0);
   CHECK_EQ(std::isnan(*stddev), 0);
 }
 
-void normalize(const float* i_pxls, const size_t w, const size_t h,
-               const bool color, float* o_pxls) {
+void normalize(const double* i_pxls, const size_t w, const size_t h,
+               const bool color, double* o_pxls) {
+  // Number of channels
   const size_t c = color ? 3 : 1;
+  // Number of pixels
   const size_t n = w * h;
-  const size_t window_pixels = FLAGS_h * FLAGS_w;
+  // Window area
+  const size_t wa = FLAGS_w * FLAGS_w;
   // Compute integral of the image for each channel
-  float* im_ii;
-  im_ii = new float [c * n];
+  double* im_ii;
+  im_ii = new double[c * n];
   for (size_t k = 0; k < c; ++k) {
-    integral(i_pxls + k * n, w, h, im_ii);
+    integral(i_pxls + k * n, w, h, im_ii + k * n);
   }
   // Compute squared image
-  float* im_sq;
-  im_sq = new float [c * n];
-  memcpy(im_sq, i_pxls, sizeof(float) * c * n);
-  sxx(im_sq, c * n);
+  double* im_sq;
+  im_sq = new double[c * n];
+  memcpy(im_sq, i_pxls, sizeof(double) * c * n);
+  dxx(im_sq, c * n);
   // Compute integral of the squared image for each channel
-  float* sq_ii;
-  sq_ii = new float [c * n];
+  double* sq_ii;
+  sq_ii = new double[c * n];
   for (size_t k = 0; k < c; ++k) {
-    integral(im_sq + k * n, w, h, sq_ii);
+    integral(im_sq + k * n, w, h, sq_ii + k * n);
   }
   // Initialize pixel counter (how many times a pixel is visited by a window)
-  uint32_t* counter = new uint32_t [c * n];
+  uint32_t* counter = new uint32_t[c * n];
   memset(counter, 0x00, sizeof(uint32_t) * c * n);
   // Initialize output image
-  memset(o_pxls, 0x00, sizeof(float) * c * n);
-
+  memset(o_pxls, 0x00, sizeof(double) * c * n);
   // For each channel
   for (size_t k = 0; k < c; ++k) {
     // For each window
-    for (size_t y0 = 0; y0 + FLAGS_h <= h; y0 += FLAGS_s) {
+    for (size_t y0 = 0; y0 + FLAGS_w <= h; y0 += FLAGS_s) {
       for (size_t x0 = 0; x0 + FLAGS_w <= w; x0 += FLAGS_s) {
-        const size_t ym = y0 + FLAGS_h - 1;
+        const size_t ym = y0 + FLAGS_w - 1;
         const size_t xm = x0 + FLAGS_w - 1;
-        float mean_im, std_im;
-        image_statistics(i_pxls + k * n, w, h, color, x0, y0, FLAGS_w, FLAGS_h, &mean_im, &std_im);
-
-        /*const float mean_im = (
+#ifndef NDEBUG
+        double mean_slow, std_slow;
+        image_statistics(i_pxls + k * n, w, h, x0, y0, &mean_slow, &std_slow);
+        DLOG(INFO) << "mean_slow(" << k << "," << y0 << "," << x0 <<") = "
+                   << mean_slow;
+        DLOG(INFO) << "std_slow(" << k << "," << y0 << "," << x0 <<") = "
+                   << std_slow;
+#endif
+        const double mean_im = (
             im_ii[k * n + ym * w + xm] +
             (y0 > 0 && x0 > 0 ? im_ii[k * n + (y0 - 1) * w + (x0 - 1)] : 0) -
-            (y0 > 0 ? im_ii[k * n + (y0 - 1) *w + xm] : 0) -
-            (x0 > 0 ? im_ii[k * n + ym * w + (x0 - 1)] : 0)) / window_pixels;
-        const float mean_sq = (
+            (y0 > 0 ? im_ii[k * n + (y0 - 1) * w + xm] : 0) -
+            (x0 > 0 ? im_ii[k * n + ym * w + (x0 - 1)] : 0)) / wa;
+        const double mean_sq = (
             sq_ii[k * n + ym * w + xm] +
             (y0 > 0 && x0 > 0 ? sq_ii[k * n + (y0 - 1) * w + (x0 - 1)] : 0) -
             (y0 > 0 ? sq_ii[k * n + (y0 - 1) * w + xm] : 0) -
-            (x0 > 0 ? sq_ii[k * n + ym * w + (x0 - 1)] : 0)) / window_pixels;
-        const float var_im = mean_sq - mean_im * mean_im;
-        const float std_im = sqrtf(var_im < 0.0f ? 0.0f : var_im);*/
-        //LOG(ERROR) << "std_im^2("<<k<<","<<y0<<","<<x0<<")" << mean_sq - mean_im * mean_im;
-        //LOG(ERROR) << "mean_slow("<<k<<","<<y0<<","<<x0<<") = " << mean_slow;
-        //LOG(ERROR) << "std_slow("<<k<<","<<y0<<","<<x0<<") = " << stddev_slow;
-        //LOG(ERROR) << "mean_im("<<k<<","<<y0<<","<<x0<<") = " << mean_im;
-        //LOG(ERROR) << "mean_sq("<<k<<","<<y0<<","<<x0<<") = " << mean_sq;
-        //LOG(ERROR) << "std_im("<<k<<","<<y0<<","<<x0<<") = " << std_im;
+            (x0 > 0 ? sq_ii[k * n + ym * w + (x0 - 1)] : 0)) / wa;
+        const double var_im = mean_sq - mean_im * mean_im;
+        CHECK_GE(var_im, 0.0f);
+        const double std_im = sqrt(var_im);
+#ifndef NDEBUG
+        DLOG(INFO) << "mean_im(" << k << "," << y0 << "," << x0 <<") = "
+                   << mean_im;
+        DLOG(INFO) << "var_im(" << k << "," << y0 << "," << x0 <<") = "
+                   << var_im;
+        DLOG(INFO) << "std_im(" << k << "," << y0 << "," << x0 <<") = "
+                   << std_im;
+        CHECK_NEAR(mean_slow, mean_im, 1E-6);
+        CHECK_NEAR(std_slow, std_im, 1E-6);
+#endif
+        // Standarize window
         for (size_t y = y0; y <= ym; ++y) {
           for (size_t x = x0; x <= xm; ++x) {
-            // New pixel value
-            const float npx =
-              (i_pxls[k * n + y * w + x] - mean_im) / (std_im > 0.0f ? std_im : 1.0f);
-            o_pxls[k * n + y * w + x] += npx;
-            ++counter[k * n + y * w + x];
+            const size_t i = k * n + y * w + x;
+            o_pxls[i] +=
+                (i_pxls[i] - mean_im) / (std_im > 0.0f ? std_im : 1.0f);
+            ++counter[i];
           }
         }
       }
     }
   }
   for (size_t i = 0; i < c * n; ++i) {
-    //const size_t k = i / n;
-    //const size_t y = (i % n) / w;
-    //const size_t x = (i % n) % w;
-    //CHECK_GT(counter[i], 0) << "y = " << y << ", x = " << x << ", k = " << k;
     o_pxls[i] /= (counter[i] > 0.0 ? counter[i] : 1.0f);
-    //LOG(ERROR) << o_pxls[i];
   }
+  /*
+  for (size_t k = 0; k < c; ++k) {
+    // For each window
+    for (size_t y0 = 0; y0 + FLAGS_w <= h; y0 += FLAGS_w) {
+      for (size_t x0 = 0; x0 + FLAGS_w <= w; x0 += FLAGS_w) {
+        const size_t ym = y0 + FLAGS_w - 1;
+        const size_t xm = x0 + FLAGS_w - 1;
+        double minf = INFINITY, maxf = -INFINITY;
+        for (size_t y = y0; y <= ym; ++y) {
+          for (size_t x = x0; x <= xm; ++x) {
+            const size_t i = k * n + y * w + x;
+            minf = std::min(minf, o_pxls[i]);
+            maxf = std::max(maxf, o_pxls[i]);
+          }
+        }
+        const double diff = maxf - minf;
+        for (size_t y = y0; y <= ym; ++y) {
+          for (size_t x = x0; x <= xm; ++x) {
+            const size_t i = k * n + y * w + x;
+            if (diff > 0) {
+              o_pxls[i] = (o_pxls[i] - minf) / diff;
+            } else {
+              o_pxls[i] = 0.0;
+            }
+          }
+        }
+      }
+    }
+  }
+  */
   delete [] counter;
   delete [] sq_ii;
   delete [] im_sq;
@@ -151,18 +184,18 @@ void normalize(const float* i_pxls, const size_t w, const size_t h,
 }
 
 
-void pixels_to_floats(
+void pixels_to_doubles(
     const PixelPacket* pxls, const size_t w, const size_t h,
-    const bool color, float* fpxls) {
+    const bool color, double* fpxls) {
   const size_t n = w * h;
   const size_t ch_bytes = sizeof(pxls[0].red);
-  const size_t max_ch_value = (1L << (8 * ch_bytes)) - 1;
-  const float scale_ratio = 1.0f / max_ch_value;
+  const size_t max_ch_value = (1L << (8L * ch_bytes)) - 1;
+  const double scale_ratio = 1.0f / max_ch_value;
   if (color) {
     for (size_t i = 0; i < n; ++i) {
-      fpxls[i]         = pxls[i].red   * scale_ratio;
-      fpxls[n + i]     = pxls[i].green * scale_ratio;
-      fpxls[n + n + i] = pxls[i].blue  * scale_ratio;
+      fpxls[i] = pxls[i].red * scale_ratio;
+      fpxls[n + i] = pxls[i].green * scale_ratio;
+      fpxls[n + n + i] = pxls[i].blue * scale_ratio;
     }
   } else {
     for (size_t i = 0; i < n; ++i) {
@@ -171,34 +204,37 @@ void pixels_to_floats(
   }
 }
 
-void floats_to_pixels(
-    const float* fpxls, const size_t w, const size_t h,
-    const bool color, PixelPacket* pxls) {
+void doubles_to_pixels(const double* fpxls, const size_t w, const size_t h,
+                      const bool color, PixelPacket* pxls) {
   const size_t n = w * h;
   const size_t ch_bytes = sizeof(pxls[0].red);
-  const size_t max_ch_value = (1L << (8 * ch_bytes)) - 1;
+  const size_t max_ch_value = (1L << (8L * ch_bytes)) - 1;
   if (color) {
     for (size_t i = 0; i < n; ++i) {
-      pxls[i].red   = fpxls[i]         * max_ch_value;
-      pxls[i].green = fpxls[n + i]     * max_ch_value;
-      pxls[i].blue  = fpxls[n + n + i] * max_ch_value;
+      pxls[i].red = static_cast<Quantum>(
+          round(fpxls[i] * max_ch_value));
+      pxls[i].green = static_cast<Quantum>(
+          round(fpxls[n + i] * max_ch_value));
+      pxls[i].blue = static_cast<Quantum>(
+          round(fpxls[n + n + i] * max_ch_value));
     }
   } else {
     for (size_t i = 0; i < n; ++i) {
-      pxls[i].red = pxls[i].green = pxls[i].blue = fpxls[i] * max_ch_value;
+      pxls[i].red = pxls[i].green = pxls[i].blue = static_cast<Quantum>(
+          fpxls[i] * max_ch_value);
     }
   }
 }
 
-void floats_to_range_01(float* fpxls, const size_t w, const size_t h, const bool color) {
+void doubles_to_range_01(double* fpxls, const size_t w, const size_t h, const bool color) {
   const size_t n = w * h;
-  float minf[3] = {INFINITY, INFINITY, INFINITY};
-  float maxf[3] = {-INFINITY, -INFINITY, -INFINITY};
+  double minf[3] = {INFINITY, INFINITY, INFINITY};
+  double maxf[3] = {-INFINITY, -INFINITY, -INFINITY};
   if (color) {
     for (size_t i = 0; i < n; ++i) {
-      const float r = fpxls[i];
-      const float g = fpxls[n + i];
-      const float b = fpxls[n + n + i];
+      const double r = fpxls[i];
+      const double g = fpxls[n + i];
+      const double b = fpxls[n + n + i];
       minf[0] = std::min(minf[0], r);
       minf[1] = std::min(minf[1], g);
       minf[2] = std::min(minf[2], b);
@@ -206,25 +242,28 @@ void floats_to_range_01(float* fpxls, const size_t w, const size_t h, const bool
       maxf[1] = std::max(maxf[1], g);
       maxf[2] = std::max(maxf[2], b);
     }
-    const float diffr = maxf[0] - minf[0];
+    // Normalize red channel
+    const double diffr = maxf[0] - minf[0];
     if (diffr < 1E-6) {
-      memset(fpxls, 0x00, sizeof(float) * n);
+      memset(fpxls, 0x00, sizeof(double) * n);
     } else {
       for (size_t i = 0; i < n; ++i) {
         fpxls[i] = (fpxls[i] - minf[0]) / diffr;
       }
     }
-    const float diffg = maxf[1] - minf[1];
+    // Normalize green channel
+    const double diffg = maxf[1] - minf[1];
     if (diffg < 1E-6) {
-      memset(fpxls + n, 0x00, sizeof(float) * n);
+      memset(fpxls + n, 0x00, sizeof(double) * n);
     } else {
       for (size_t i = 0; i < n; ++i) {
         fpxls[n + i] = (fpxls[n + i] - minf[1]) / diffg;
       }
     }
-    const float diffb = maxf[2] - minf[2];
+    // Normalize blue channel
+    const double diffb = maxf[2] - minf[2];
     if (diffb < 1E-6) {
-      memset(fpxls + n + n, 0x00, sizeof(float) * n);
+      memset(fpxls + n + n, 0x00, sizeof(double) * n);
     } else {
       for (size_t i = 0; i < n; ++i) {
         fpxls[n + n + i] = (fpxls[n + n + i] - minf[2]) / diffb;
@@ -232,13 +271,13 @@ void floats_to_range_01(float* fpxls, const size_t w, const size_t h, const bool
     }
   } else {
     for (size_t i = 0; i < n; ++i) {
-      const float px = fpxls[i];
+      const double px = fpxls[i];
       minf[0] = std::min(minf[0], px);
       maxf[0] = std::max(maxf[0], px);
     }
-    const float diff = maxf - minf;
+    const double diff = maxf[0] - minf[0];
     if (diff < 1E-6) {
-      memset(fpxls, 0x00, sizeof(float) * n);
+      memset(fpxls, 0x00, sizeof(double) * n);
     } else {
       for (size_t i = 0; i < n; ++i) {
         fpxls[i] = (fpxls[i] - minf[0]) / diff;
@@ -284,15 +323,15 @@ int main(int argc, char** argv) {
   // Pointer to input image pixels
   const PixelPacket* i_pxls = i_img.getConstPixels(0, 0, W, H);
 
-  float* i_pxls_flt = new float [N];
-  pixels_to_floats(i_pxls, W, H, color, i_pxls_flt);
-  float* o_pxls_flt = new float [N];
+  double* i_pxls_flt = new double [N];
+  pixels_to_doubles(i_pxls, W, H, color, i_pxls_flt);
+  double* o_pxls_flt = new double [N];
   normalize(i_pxls_flt, W, H, color, o_pxls_flt);
   // Put pixel values in range [0..1]
-  floats_to_range_01(o_pxls_flt, W, H, color);
+  doubles_to_range_01(o_pxls_flt, W, H, color);
   // Pointer to output image pixels
   PixelPacket* o_pxls = o_img.getPixels(0, 0, W, H);
-  floats_to_pixels(o_pxls_flt, W, H, color, o_pxls);
+  doubles_to_pixels(o_pxls_flt, W, H, color, o_pxls);
   try {
     o_img.syncPixels();
     o_img.write(FLAGS_o);
