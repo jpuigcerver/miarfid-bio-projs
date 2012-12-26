@@ -13,27 +13,35 @@ DEFINE_string(o, "-", "Output image. If none, use standard output.");
 DEFINE_uint64(w, 5, "Window size for local normalization.");
 DEFINE_uint64(s, 1, "Pixel step.");
 
-void histogram(const Quantum* img, const size_t channels,
-               const size_t w, const size_t h,
-               const size_t x0, const size_t y0,
-               uint32_t* hist) {
+void histogram(const Quantum* img, const size_t w, const size_t h,
+               const size_t x0, const size_t y0, const size_t win_w,
+               const size_t win_h, uint32_t* hist, Quantum* minv) {
   CHECK_NOTNULL(hist);
-  const size_t n = FLAGS_w * FLAGS_w;
   // Compute histogram
-  memset(hist, 0x00, sizeof(size_t) * channels * (MaxRGB + 1));
-  for (size_t c = 0; c < channels; ++c) {
-    for (size_t y = y0; y < y0 + FLAGS_w; ++y) {
-      for (size_t x = x0; x < x0 + FLAGS_w; ++x) {
-        const size_t i = c * n + y * w + x;
-        ++hist[c * n + img[i]];
+  memset(hist, 0x00, sizeof(uint32_t) * (MaxRGB + 1));
+  *minv = MaxRGB;
+  for (size_t y = y0; y < y0 + win_h; ++y) {
+    for (size_t x = x0; x < x0 + win_w; ++x) {
+      const size_t i = y * w + x;
+      ++hist[img[i]];
+      if (img[i] < *minv) {
+        *minv = img[i];
       }
     }
   }
   // Compute cumulative histogram
-  for (size_t c = 0; c < channels; ++c) {
-    for (size_t i = 1; i < n; ++i) {
-      hist[c * n + i] += hist[c * n + i - 1];
+#ifndef NDEBUG
+  if (hist[0] != 0) {
+    DLOG(INFO) << "hist(0) = " << hist[0];
+  }
+#endif
+  for (size_t i = 1; i <= MaxRGB; ++i) {
+    hist[i] += hist[i - 1];
+#ifndef NDEBUG
+    if (hist[i] != hist[i - 1]) {
+      DLOG(INFO) << "hist(" << i << ") = " << hist[i];
     }
+#endif
   }
 }
 
@@ -41,32 +49,44 @@ void equalization(const Quantum* i_pxls, const size_t channels, const size_t w,
                   const size_t h, Quantum* o_pxls) {
   CHECK_NOTNULL(o_pxls);
   const size_t n = w * h;
-  const size_t wa = FLAGS_w * FLAGS_w;
-  uint32_t* hist = new uint32_t[channels * (MaxRGB + 1)];
+  uint32_t* hist = new uint32_t[MaxRGB + 1];
   uint32_t* auxout = new uint32_t[n];
   uint32_t* counter = new uint32_t[n];
   for (size_t c = 0; c < channels; ++c) {
     memset(auxout, 0x00, sizeof(uint32_t) * n);
     memset(counter, 0x00, sizeof(uint32_t) * channels * n);
-    for (size_t y0 = 0; y0 + FLAGS_w < h; y0 += FLAGS_s) {
-      for (size_t x0 = 0; x0 + FLAGS_w < w; x0 += FLAGS_s) {
-        const size_t ym = y0 + FLAGS_w - 1;
-        const size_t xm = x0 + FLAGS_w - 1;
+    for (size_t y0 = 0; y0 < h; y0 += FLAGS_s) {
+      const size_t win_h = std::min<size_t>(FLAGS_w, h - y0);
+      for (size_t x0 = 0; x0 < w; x0 += FLAGS_s) {
+        const size_t win_w = std::min<size_t>(FLAGS_w, w - x0);
+        const size_t wa = win_h * win_w;
+        const size_t ym = y0 + win_h - 1;
+        const size_t xm = x0 + win_w - 1;
+        DLOG(INFO) << "Window: " << " " << y0 << " " << x0
+                   << " " << ym << " " << xm;
         // Compute local histogram
-        histogram(i_pxls, channels, w, h, x0, y0, hist);
+        Quantum minv;
+        histogram(i_pxls, w, h, x0, y0, win_w, win_h, hist, &minv);
         for (size_t y = y0; y <= ym; ++y) {
           for (size_t x = x0; x <= xm; ++x) {
             const size_t i = y * w + x;
-            auxout[i] += static_cast<uint32_t>(round(
-                MaxRGB * hist[i_pxls[c * n + i]] / static_cast<double>(wa)));
+            const uint32_t hi = hist[i_pxls[c * n + i]];
+            const uint32_t hm = hist[minv];
+            const uint32_t npx = static_cast<uint32_t>(round(
+                MaxRGB * static_cast<double>(hi - hm) / (wa - hm)));
+            DLOG(INFO) << "npx(" << c << "," << i << ") = " << npx;
+            auxout[i] += npx;
             ++counter[i];
           }
         }
+        if (win_w < FLAGS_w) { break; }
       }
+      if (win_h < FLAGS_w) { break; }
     }
     for (size_t i = 0; i < n; ++i) {
       o_pxls[c * n + i] = static_cast<uint32_t>(round(
-          static_cast<double>(auxout[i]) / counter[i] > 0 ? counter[i] : 1));
+          static_cast<double>(auxout[i]) / (counter[i] > 0 ? counter[i] : 1)));
+      DLOG(INFO) << "out(" << c << "," << i << ") = " << o_pxls[c * n + i];
     }
   }
 }
@@ -93,6 +113,8 @@ void devectorize_pixels(const Quantum* pxls_v, const size_t channels,
     if (channels > 1) {
       pxls[i].green = pxls_v[n + i];
       pxls[i].blue = pxls_v[2 * n + i];
+    } else {
+      pxls[i].blue = pxls[i].green = pxls[i].red;
     }
   }
 }
