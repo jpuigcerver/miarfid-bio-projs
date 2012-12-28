@@ -4,16 +4,24 @@
 #include <stddef.h>
 #include <vector>
 
-template <class Point>
 class KClustering {
  public:
-  KClustering(const size_t k);
-  void add_point(const Point& p);
+  KClustering(const size_t k, const size_t dim);
+  ~KClustering();
+  void add_point(const double* p);
   void train();
+  void clear();
+  const double* centroid(const size_t c) const;
+  size_t assign_centroid(const double* p) const;
  private:
-  const size_t k;
-  std::vector<Point> points;
-  std::vector<Point> prototypes;
+  size_t K_, D_;
+  double* centroids_;
+  size_t* assigned_centroids_;
+  size_t* centroid_counter_;
+  std::vector<const double*> points_;
+  bool assign_centroids();
+  void compute_centroids();
+  double eucl_dist(const double* a, const double* b) const;
 };
 
 #endif  // K_CLUSTERING_H_

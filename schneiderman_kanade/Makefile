@@ -7,10 +7,13 @@ all: $(BINARIES)
 dataset.o: dataset.cc dataset.h
 	$(CXX) -c $< $(CXX_FLAGS)
 
+utils.o: utils.cc utils.h
+	$(CXX) -c $< $(CXX_FLAGS)
+
 sk.o: sk.cc
 	$(CXX) -c $< $(CXX_FLAGS)
 
-sk: sk.o dataset.o
+sk: sk.o dataset.o utils.o
 	$(CXX) -o $@ $^ $(LD_FLAGS)
 
 sk_model.o: sk_model.cc sk_model.h

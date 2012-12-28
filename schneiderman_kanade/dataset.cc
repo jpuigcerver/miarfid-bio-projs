@@ -1,6 +1,7 @@
 #include <dataset.h>
 #include <defines.h>
 #include <glog/logging.h>
+#include <utils.h>
 
 #include <algorithm>
 #include <random>
@@ -144,14 +145,6 @@ const Dataset::Image& Dataset::get_cached_image(size_t cimg) const {
   CHECK_NOTNULL(data[j].img);
   return *(data[j].img);
 }
-
-class UniformDist {
- public:
-  ptrdiff_t operator() (ptrdiff_t max) const {
-    std::uniform_int_distribution<int> dist(0, max-1);
-    return dist(PRNG);
-  }
-};
 
 bool Dataset::partition(Dataset * part, float f) {
   std::random_shuffle(data.begin(), data.end(), UniformDist());
