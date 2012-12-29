@@ -1,6 +1,7 @@
 #include <dataset.h>
 #include <defines.h>
 #include <glog/logging.h>
+#include <stdio.h>
 #include <utils.h>
 
 #include <algorithm>
@@ -14,12 +15,45 @@ bool NormImage::read(const std::string& filename) {
     LOG(ERROR) << "Failed opening image " << filename;
     return false;
   }
-  data.clear();
+  data_.clear();
   double f;
   while (fscanf(fp, "%lf", &f) == 1) {
-    data.push_back(f);
+    data_.push_back(f);
   }
-  return (data.size() > 0);
+  fclose(fp);
+  return (data_.size() > 0);
+}
+
+
+NormImage NormImage::window(size_t x0, size_t y0, size_t w, size_t h,
+                            size_t cols) const {
+  NormImage result;
+  result.data_.reserve(w * h);
+  for (size_t y = y0; y < y0 + h; ++y) {
+    for (size_t x = x0; x < x0 + w; ++x) {
+      const size_t i = y * cols + x;
+      result.data_.push_back(data_[i]);
+    }
+  }
+  return result;
+}
+
+const double* NormImage::data() const {
+  return data_.data();
+}
+
+double* NormImage::data() {
+  return data_.data();
+}
+
+size_t NormImage::size() const {
+  return data_.size();
+}
+
+size_t NormImage::hash() const {
+  static std::hash<std::string> str_hash;
+  std::string s((const char*)data_.data(), sizeof(double) * data_.size());
+  return str_hash(s);
 }
 
 Dataset::Datum::Datum()
@@ -32,8 +66,9 @@ Dataset::Dataset(size_t cache_size)
 }
 
 bool Dataset::load(const std::string& filename) {
-  data.clear();
+  data_.clear();
   data_faces.clear();
+  data_nfaces.clear();
   FILE * fp = fopen(filename.c_str(), "r");
   if (fp == NULL) {
     LOG(ERROR) << "Dataset \"" << filename << "\": File could not be opened.";
@@ -78,24 +113,23 @@ bool Dataset::load(const std::string& filename) {
 		   << "\": Bad label at line " << line_no << ".";
 	return false;
       }
-      dat.id = data.size();
-      data.push_back(dat);
-      if (dat.face) {
-        data_faces.push_back(&data.back());
-      }
+      dat.id = data_.size();
+      data_.push_back(dat);
+      if (dat.face) { data_faces.push_back(&data_.back()); }
+      else { data_nfaces.push_back(&data_.back()); }
     }
   }
   fclose(fp);
   load_cache(0);
-  DLOG(INFO) << "Dataset \"" << filename << "\": " << data.size() << " images in the dataset.";
+  DLOG(INFO) << "Dataset \"" << filename << "\": " << data_.size() << " images in the dataset.";
   return true;
 }
 
 void Dataset::clear_cache() {
   for (size_t i = 0; i < CACHED_IMAGES_SIZE; ++i) {
-    const size_t j = (start_img + i) % data.size();
-    if (data[j].img != NULL) {
-      delete data[j].img;
+    const size_t j = (start_img + i) % data_.size();
+    if (data_[j].img != NULL) {
+      delete data_[j].img;
     }
   }
 }
@@ -104,58 +138,58 @@ void Dataset::load_cache(size_t img) {
   clear_cache();
   start_img = img;
   for (size_t i = 0; i < CACHED_IMAGES_SIZE; ++i) {
-    const size_t j = (start_img + i) % data.size();
-    data[j].img = new Image;
-    CHECK(data[j].img->read(data[j].file));
+    const size_t j = (start_img + i) % data_.size();
+    data_[j].img = new NormImage;
+    CHECK(data_[j].img->read(data_[j].file));
   }
 }
 
 bool Dataset::cached(size_t img) const {
-  CHECK_LT(img, data.size());
-  const size_t real_cache_size = std::min<size_t>(CACHED_IMAGES_SIZE, data.size());
-  const size_t end_img = (start_img + real_cache_size) % data.size();
+  CHECK_LT(img, data_.size());
+  const size_t real_cache_size = std::min<size_t>(CACHED_IMAGES_SIZE, data_.size());
+  const size_t end_img = (start_img + real_cache_size) % data_.size();
   if (end_img > start_img && img >= start_img && img < end_img) return true;
   else if (end_img <= start_img && (img >= start_img || img < end_img)) return true;
   else return false;
 }
 
-Dataset::Image& Dataset::get_image(size_t img) {
+NormImage& Dataset::get_image(size_t img) {
   if (!cached(img)) {
     load_cache(img);
   }
-  CHECK_NOTNULL(data[img].img);
-  return *(data[img].img);
+  CHECK_NOTNULL(data_[img].img);
+  return *(data_[img].img);
 }
 
 bool Dataset::is_face(size_t img) const {
-  CHECK_LT(img, data.size());
-  return data[img].face;
+  CHECK_LT(img, data_.size());
+  return data_[img].face;
 }
 
-Dataset::Image& Dataset::get_cached_image(size_t cimg) {
+NormImage& Dataset::get_cached_image(size_t cimg) {
   CHECK_LT(cimg, CACHED_IMAGES_SIZE);
-  const size_t j = (start_img + cimg) % data.size();
-  CHECK_NOTNULL(data[j].img);
-  return *(data[j].img);
+  const size_t j = (start_img + cimg) % data_.size();
+  CHECK_NOTNULL(data_[j].img);
+  return *(data_[j].img);
 }
 
-const Dataset::Image& Dataset::get_cached_image(size_t cimg) const {
+const NormImage& Dataset::get_cached_image(size_t cimg) const {
   CHECK_LT(cimg, CACHED_IMAGES_SIZE);
-  const size_t j = (start_img + cimg) % data.size();
-  CHECK_NOTNULL(data[j].img);
-  return *(data[j].img);
+  const size_t j = (start_img + cimg) % data_.size();
+  CHECK_NOTNULL(data_[j].img);
+  return *(data_[j].img);
 }
 
 bool Dataset::partition(Dataset * part, float f) {
-  std::random_shuffle(data.begin(), data.end(), UniformDist());
-  size_t rem_size = static_cast<size_t>(f*data.size());
-  part->data.clear();
-  if (rem_size == data.size()) {
+  std::random_shuffle(data_.begin(), data_.end(), UniformDist());
+  size_t rem_size = static_cast<size_t>(f * data_.size());
+  part->data_.clear();
+  if (rem_size == data_.size()) {
     return true;
   }
-  part->data.resize(data.size() - rem_size);
-  std::copy(data.begin() + rem_size, data.end(), part->data.begin());
-  data.resize(rem_size);
+  part->data_.resize(data_.size() - rem_size);
+  std::copy(data_.begin() + rem_size, data_.end(), part->data_.begin());
+  data_.resize(rem_size);
   load_cache(0);
   init_faces();
   part->load_cache(0);
@@ -164,20 +198,22 @@ bool Dataset::partition(Dataset * part, float f) {
 }
 
 size_t Dataset::size() const {
-  return data.size();
+  return data_.size();
 }
 
 void Dataset::print() const {
-  for(const Datum& d : data) {
+  for(const Datum& d : data_) {
     printf("%s\n", d.file.c_str());
   }
 }
 
 void Dataset::init_faces() {
   data_faces.clear();
-  for (size_t i = 0; i < data.size(); ++i) {
-    if (data[i].face) {
-      data_faces.push_back(&data[i]);
+  for (size_t i = 0; i < data_.size(); ++i) {
+    if (data_[i].face) {
+      data_faces.push_back(&data_[i]);
+    } else {
+      data_nfaces.push_back(&data_[i]);
     }
   }
 }

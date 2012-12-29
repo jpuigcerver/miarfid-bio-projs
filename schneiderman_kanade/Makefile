@@ -1,8 +1,11 @@
-BINARIES=sk
-CXX_FLAGS=-std=c++11 -Wall -pedantic `Magick++-config  --cppflags` -I./
-LD_FLAGS=-lgflags -lglog `Magick++-config --ldflags --libs`
+CXX_FLAGS=-std=c++0x -Wall -pedantic `Magick++-config  --cppflags` -I./ -g
+LD_FLAGS=-lgflags -lglog -lblas -lprotobuf `Magick++-config --ldflags --libs` -g
+BINARIES=sk-train
 
-all: $(BINARIES)
+all: prot $(BINARIES)
+
+prot:
+	make -C protos
 
 dataset.o: dataset.cc dataset.h
 	$(CXX) -c $< $(CXX_FLAGS)
@@ -10,19 +13,21 @@ dataset.o: dataset.cc dataset.h
 utils.o: utils.cc utils.h
 	$(CXX) -c $< $(CXX_FLAGS)
 
-sk.o: sk.cc
-	$(CXX) -c $< $(CXX_FLAGS)
-
-sk: sk.o dataset.o utils.o
-	$(CXX) -o $@ $^ $(LD_FLAGS)
-
-sk_model.o: sk_model.cc sk_model.h
+sk-model.o: sk-model.cc sk-model.h
 	$(CXX) -c $< $(CXX_FLAGS)
 
 k-clustering.o: k-clustering.cc k-clustering.h
 	$(CXX) -c $< $(CXX_FLAGS)
 
+sk-train.o: sk-train.cc
+	$(CXX) -c $< $(CXX_FLAGS)
+
+sk-train: sk-train.o dataset.o utils.o sk-model.o k-clustering.o \
+	protos/sk-model.pb.o protos/k-clustering.pb.o
+	$(CXX) -o $@ $^  $(LD_FLAGS)
+
 clean:
+	make -C protos clean
 	rm -f *.o *~
 
 distclean: clean

@@ -2,50 +2,73 @@
 
 #include <cblas.h>
 #include <glog/logging.h>
+#include <utils.h>
 
+#include <algorithm>
+#include <functional>
 #include <random>
 
 extern std::default_random_engine PRNG;
+
+size_t dhash(const double* v, const size_t d) {
+  static std::hash<std::string> str_hash;
+  std::string s((const char*)v, sizeof(double) * d);
+  return str_hash(s);
+}
+
+KClustering::KClustering()
+    : K_(0), D_(0), centroids_(NULL), assigned_centroids_(NULL),
+      centroid_counter_(NULL) {
+  DLOG(INFO) << "K-Means clustering created. Parameters unspecified.";
+}
 
 KClustering::KClustering(const size_t k, const size_t dim)
     : K_(k), D_(dim), centroids_(NULL), assigned_centroids_(NULL),
       centroid_counter_(NULL) {
   CHECK_GT(K_, 0);
   CHECK_GT(D_, 0);
-  centroids_ = new double[K_ * D_];
-  centroid_counter_ = new size_t[K_];
+  DLOG(INFO) << "K-Means clustering created. Parameters: K = "
+             << K_ << " and D_ = " << D_;
 }
 
 KClustering::~KClustering() {
+  clear();
+}
+
+void KClustering::clear() {
   if (centroids_ != NULL) {
     delete [] centroids_;
     centroids_ = NULL;
+  }
+  clear_points();
+}
+
+void KClustering::clear_points() {
+  if (assigned_centroids_ != NULL) {
+    delete [] assigned_centroids_;
+    assigned_centroids_ = NULL;
   }
   if (centroid_counter_ != NULL) {
     delete [] centroid_counter_;
     centroid_counter_ = NULL;
   }
-  clear();
-}
-
-void KClustering::clear() {
-  if (assigned_centroids_ != NULL) {
-    delete [] assigned_centroids_;
-    assigned_centroids_ = NULL;
-  }
   points_.clear();
 }
 
 const double* KClustering::centroid(const size_t c) const {
+  CHECK_NOTNULL(centroids_);
   return centroids_ + c * D_;
 }
 
 size_t KClustering::assign_centroid(const double* p) const {
+  CHECK_NOTNULL(centroids_);
   double dc = eucl_dist(p, centroids_);
   size_t ci = 0;
+  DLOG(INFO) << "dist_to_centroid(" << ci << ") = " << dc;
   for (size_t j = 1; j < K_; ++j) {
     const double* vj = centroids_ + j * D_;
     const double dj = eucl_dist(p, vj);
+    DLOG(INFO) << "dist_to_centroid(" << j << ") = " << dj;
     if (dj < dc) {
       dc = dj;
       ci = j;
@@ -54,26 +77,45 @@ size_t KClustering::assign_centroid(const double* p) const {
   return ci;
 }
 
-void KClustering::add_point(const double* p) {
+size_t KClustering::points_size() const {
+  return points_.size();
+}
+
+void KClustering::add(const double* p) {
   points_.push_back(p);
 }
 
 void KClustering::train() {
+  DLOG(INFO) << "K-Means clustering training started...";
+  CHECK_GT(K_, 0);
+  CHECK_GT(D_, 0);
   CHECK_GE(points_.size(), K_);
-  // Assign centroids randomly
+  // Init centroids to random points
+  DLOG(INFO) << "Initializing centroids...";
+  if (centroids_ != NULL) { delete [] centroids_; }
+  centroids_ = new double[K_ * D_];
+  if (centroid_counter_ != NULL) { delete [] centroid_counter_; }
+  centroid_counter_ = new size_t[K_];
+  //std::random_shuffle(points_.begin(), points_.end(), UniformDist());
+  for (size_t c = 0; c < K_; ++c) {
+    double* cv = centroids_ + c * D_;
+    memcpy(cv, points_[c], sizeof(double) * D_);
+#ifndef NDEBUG
+    DLOG(INFO) << "Centroid " << c << " hash = " << dhash(cv, D_);
+#endif
+  }
+  // Assign all points to the first centroid
   if (assigned_centroids_ != NULL) { delete [] assigned_centroids_; }
   assigned_centroids_ = new size_t[points_.size()];
-  std::uniform_int_distribution<size_t> udist(0, K_ - 1);
-  for (size_t i = 0; i < points_.size(); ++i) {
-    assigned_centroids_[i] = udist(PRNG);
-  }
+  memset(assigned_centroids_, 0x00, sizeof(size_t) * points_.size());
   // K-means clustering
-  do {
+  while (assign_centroids()) {
     compute_centroids();
-  } while(assign_centroids());
+  }
 }
 
 void KClustering::compute_centroids() {
+  DLOG(INFO) << "Recompute centroids...";
   memset(centroids_, 0x00, sizeof(double) * K_ * D_);
   memset(centroid_counter_, 0x00, sizeof(size_t) * K_);
   // Sum points coordenates to each centroid
@@ -105,13 +147,43 @@ double KClustering::eucl_dist(const double* a, const double* b) const {
 }
 
 bool KClustering::assign_centroids() {
+  DLOG(INFO) << "Assigning data points to closest centroids...";
   bool move = false;
   for (size_t i = 0; i < points_.size(); ++i) {
     const size_t ci = assign_centroid(points_[i]);
     if (ci != assigned_centroids_[i]) {
+      DLOG(INFO) << "Data point changed its cluster.";
       move = true;
       assigned_centroids_[i] = ci;
     }
   }
   return move;
+}
+
+bool KClustering::load(const KClusteringConfig& conf) {
+  DLOG(INFO) << "Loading K-Means clustering...";
+  K_ = conf.k();
+  CHECK_GT(K_, 0);
+  D_ = conf.d();
+  CHECK_GT(D_, 0);
+  if (K_ * D_ != static_cast<size_t>(conf.centroid_size())) {
+    LOG(ERROR) << "";
+    return false;
+  }
+  clear();
+  centroids_ = new double[K_ * D_];
+  memcpy(centroids_, conf.centroid().data(), sizeof(double) * K_ * D_);
+  DLOG(INFO) << "K-Means centroids loaded";
+  return true;
+}
+
+bool KClustering::save(KClusteringConfig* conf) const {
+  DLOG(INFO) << "Saving K-Means clustering...";
+  CHECK_NOTNULL(conf);
+  conf->clear_centroid();
+  conf->mutable_centroid()->Reserve(K_ * D_);
+  memcpy(conf->mutable_centroid()->mutable_data(), centroids_,
+         sizeof(double) * K_ * D_);
+  DLOG(INFO) << "K-Means centroids saved";
+  return true;
 }
