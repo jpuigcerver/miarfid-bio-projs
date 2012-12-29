@@ -6,56 +6,38 @@
 #include <defines.h>
 #include <stddef.h>
 
-class NormImage {
-public:
-  NormImage() {}
-  bool read(const std::string& filename);
-  NormImage window(size_t x0, size_t y0, size_t w, size_t h,
-                   size_t cols) const;
-  const double* data() const;
-  double* data();
-  size_t size() const;
-  size_t hash() const;
-  
-private:
-  std::vector<double> data_;
-};
-
 class Dataset {
  public:
-  struct Datum {
-    std::string file;
+  struct Image {
     bool face;
-    NormImage* img;
-    size_t id;
-    Datum();
+    double* img;
+    size_t size;
+    Image();
+    Image(bool face, const std::vector<double>& img);
+    Image(const Image& other);
+    ~Image();
+    size_t hash() const;
+    void window(const size_t x0, const size_t y0,
+                const size_t w, const size_t h,
+                const size_t img_w, const size_t img_h,
+                double* region) const;
+    Image& operator = (const Image& other);
   };
-
-  Dataset(size_t cached_images = CACHED_IMAGES_SIZE);
+  Dataset();
+  Dataset(const Dataset& other);
+  ~Dataset();
+  void clear();
   bool load(const std::string& filename);
-  void load_cache(size_t img);
-  bool is_face(size_t img) const;
-  NormImage& get_image(size_t img);
-  NormImage& get_cached_image(size_t img);
-  const NormImage& get_cached_image(size_t img) const;
-  bool partition(Dataset * part1, float f);
-  void print() const;
 
-  size_t size() const;
-
-  inline std::vector<Datum>& data() { return data_; }
-  inline const std::vector<Datum>& data() const { return data_; }
-  inline const std::vector<Datum*>& faces() const { return data_faces; }
-  inline const std::vector<Datum*>& nfaces() const { return data_nfaces; }
-  bool cached(size_t img) const;
+  inline std::vector<Image>& data() { return data_; }
+  inline const std::vector<Image>& data() const { return data_; }
+  inline const std::vector<Image*>& faces() const { return data_faces; }
+  inline const std::vector<Image*>& nfaces() const { return data_nfaces; }
 
  private:
-  std::vector<Datum> data_;
-  std::vector<Datum*> data_faces;
-  std::vector<Datum*> data_nfaces;
-  size_t start_img;
-  void clear_cache();
-  void init_faces();
+  std::vector<Image> data_;
+  std::vector<Image*> data_faces;
+  std::vector<Image*> data_nfaces;
 };
 
 #endif  // DATASET_H_

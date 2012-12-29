@@ -16,9 +16,10 @@ class SKModel {
   SKModel(const size_t img_w, const size_t img_h, const size_t reg_w,
           const size_t reg_h, const size_t K);
   ~SKModel();
-  void train(Dataset& train_data, Dataset& valid_data);
+  void train(const Dataset& train_data, const Dataset& valid_data);
+  float test(const Dataset& test_data) const;
   void test(Dataset* test_data) const;
-  bool test(const NormImage& img) const;
+  void test(Dataset::Image* img) const;
   bool load(const SKModelConfig& conf);
   bool save(SKModelConfig* conf) const;
   bool load(const std::string& filename);

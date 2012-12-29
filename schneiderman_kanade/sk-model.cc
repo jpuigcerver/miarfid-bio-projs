@@ -10,6 +10,7 @@
 
 using google::protobuf::io::FileInputStream;
 using google::protobuf::io::FileOutputStream;
+using google::protobuf::TextFormat;
 
 SKModel::SKModel()
     : img_w_(0), img_h_(0), reg_w_(0), reg_h_(0),
@@ -35,7 +36,7 @@ SKModel::~SKModel() {
   clear();
 }
 
-bool SKModel::test(const NormImage& img) const {
+void SKModel::test(Dataset::Image* img) const {
   CHECK_GT(reg_w_, 0);
   CHECK_GT(reg_h_, 0);
   CHECK_GT(img_w_, 0);
@@ -43,10 +44,11 @@ bool SKModel::test(const NormImage& img) const {
   CHECK_GT(K_, 0);
   CHECK_GT(R_, 0);
   double log_p_img_face = 0.0, log_p_img_nface = 0.0;
+  double* region = new double[reg_w_ * reg_h_];
   for (size_t y0 = 0, pos = 0; y0 + reg_h_ <= img_h_; y0 += reg_h_) {
     for (size_t x0 = 0; x0 + reg_w_ <= img_w_; x0 += reg_w_, ++pos) {
-      NormImage region = img.window(x0, y0, reg_w_, reg_h_, img_w_);
-      const size_t q = clustering_->assign_centroid(region.data());
+      img->window(x0, y0, reg_w_, reg_h_, img_w_, img_h_, region);
+      const size_t q = clustering_->assign_centroid(region);
       const double log_p_pos_reg_face =
           log(pos_pattern_counter_[K_ * R_ + q * R_ + pos]) -
           log(total_counter_[1]);
@@ -56,36 +58,46 @@ bool SKModel::test(const NormImage& img) const {
       log_p_img_nface += log_p_pos_reg_nface;
     }
   }
-  return (log_p_img_face - log_p_img_nface) > thres_;
+  img->face = (log_p_img_face - log_p_img_nface) > thres_;
+  delete [] region;
 }
 
 void SKModel::test(Dataset* test_data) const {
-  for (size_t i = 0; i < test_data->size(); ++i) {
-    const NormImage& img = test_data->get_image(i);
-    Dataset::Datum& d = test_data->data()[i];
-    d.face = test(img);
+  for (size_t i = 0; i < test_data->data().size(); ++i) {
+    Dataset::Image& img = test_data->data()[i];
+    test(&img);
   }
 }
 
-void SKModel::train(Dataset& train_data, Dataset& valid_data) {
+float SKModel::test(const Dataset& test_data) const {
+  Dataset test2(test_data);
+  test(&test2);
+  size_t errors = 0;
+  for (size_t i = 0; i < test_data.data().size(); ++i) {
+    if (test_data.data()[i].face != test2.data()[i].face) {
+      ++errors;
+    }
+  }
+  return errors / static_cast<float>(test_data.data().size());
+}
+
+void SKModel::train(const Dataset& train_data, const Dataset& valid_data) {
+  LOG(INFO) << "SKModel training started...";
   CHECK_GT(img_w_, 0);
   CHECK_GT(img_h_, 0);
   CHECK_GT(reg_w_, 0);
   CHECK_GT(reg_h_, 0);
   CHECK_GT(K_, 0);
   CHECK_GT(R_, 0);
-  LOG(INFO) << "SKModel training started...";
   // Prepare pattern prototypes
   if (clustering_ != NULL) { delete clustering_; }
   clustering_ = new KClustering(K_, reg_w_ * reg_h_);
-  for (size_t i = 0; i < train_data.size(); ++i) {
-    const NormImage& img = train_data.get_image(i);
+  for (size_t i = 0; i < train_data.data().size(); ++i) {
+    const Dataset::Image& img = train_data.data()[i];
     for (size_t y = 0; y + reg_h_ <= img_h_; y += reg_h_) {
       for (size_t x = 0; x + reg_w_ <= img_w_; x += reg_w_) {
-        NormImage region = img.window(x, y, reg_w_, reg_h_, img_w_);
-        DLOG(INFO) << "Hash(img " << i << ", y = " << y
-                   << ", x = " << x << ") = " << region.hash();
-        clustering_->add(region.data());
+        img.window(x, y, reg_w_, reg_h_, img_w_, img_h_,
+                   clustering_->add(reg_w_ * reg_h_));
       }
     }
   }
@@ -99,31 +111,34 @@ void SKModel::train(Dataset& train_data, Dataset& valid_data) {
   total_counter_[1] = 0;
   // Init. C(q, f)
   if (pattern_counter_ != NULL) { delete [] pattern_counter_; }
-  pattern_counter_ = new size_t[2 * K_ * R_];
-  memset(pattern_counter_, 0x00, sizeof(size_t) * 2 * K_ * R_);
+  pattern_counter_ = new size_t[2 * K_];
+  memset(pattern_counter_, 0x00, sizeof(size_t) * 2 * K_);
   // Init. C(q, p, f)
   if (pos_pattern_counter_ != NULL) { delete [] pos_pattern_counter_; }
   pos_pattern_counter_ = new size_t[2 * K_ * R_];
-  memset(pattern_counter_, 0x00, sizeof(size_t) * 2 * K_ * R_);
+  memset(pos_pattern_counter_, 0x00, sizeof(size_t) * 2 * K_ * R_);
   // Count cases
-  for (size_t i = 0; i < train_data.size(); ++i) {
-    const NormImage& img = train_data.get_image(i);
+  double* region = new double[reg_h_ * reg_w_];
+  for (size_t i = 0; i < train_data.data().size(); ++i) {
+    const Dataset::Image& img = train_data.data()[i];
     for (size_t y0 = 0, pos = 0; y0 + reg_h_ <= img_h_; y0 += reg_h_) {
       for (size_t x0 = 0; x0 + reg_w_ <= img_w_; x0 += reg_w_, ++pos) {
-        NormImage region = img.window(x0, y0, reg_w_, reg_h_, img_w_);
-        const size_t q = clustering_->assign_centroid(region.data());
-        const size_t f = train_data.is_face(i) ? 1 : 0;
+        img.window(x0, y0, reg_w_, reg_h_, img_w_, img_h_, region);
+        const size_t q = clustering_->assign_centroid(region);
+        const size_t f = img.face ? 1 : 0;
         ++total_counter_[f];
         ++pattern_counter_[f * K_ + q];
         ++pos_pattern_counter_[f * K_ * R_ + q * R_ + pos];
       }
     }
   }
+  delete [] region;
   // Choose threshold
   thres_ = log(train_data.nfaces().size()) - log(train_data.faces().size());
 }
 
 bool SKModel::load(const SKModelConfig& conf) {
+  LOG(INFO) << "Loading SKModel...";
   clear();
   img_w_ = conf.img_w();
   CHECK_GT(img_w_, 0);
@@ -139,7 +154,6 @@ bool SKModel::load(const SKModelConfig& conf) {
     clustering_ = new KClustering;
     clustering_->load(conf.clustering());
     K_ = clustering_->K();
-    CHECK_EQ(R_, clustering_->D());
   }
   if (conf.total_counter_size() == 2) {
     total_counter_[0] = conf.total_counter(0);
@@ -161,6 +175,7 @@ bool SKModel::load(const SKModelConfig& conf) {
 }
 
 bool SKModel::save(SKModelConfig* conf) const {
+  LOG(INFO) << "Saving SKModel...";
   CHECK_NOTNULL(conf);
   conf->Clear();
   conf->set_img_w(img_w_);
@@ -174,14 +189,14 @@ bool SKModel::save(SKModelConfig* conf) const {
   conf->add_total_counter(total_counter_[0]);
   conf->add_total_counter(total_counter_[1]);
   if (pattern_counter_ != NULL) {
-    conf->mutable_pattern_counter()->Reserve(2 * K_);
-    memcpy(conf->mutable_pattern_counter()->mutable_data(),
-           pattern_counter_, 2 * K_);
+    for (size_t i = 0; i < 2 * K_; ++i) {
+      conf->add_pattern_counter(pattern_counter_[i]);
+    }
   }
   if (pos_pattern_counter_ != NULL) {
-    conf->mutable_pos_pattern_counter()->Reserve(2 * K_ * R_);
-    memcpy(conf->mutable_pos_pattern_counter()->mutable_data(),
-           pos_pattern_counter_, 2 * K_ * R_);
+    for (size_t i = 0; i < 2 * K_ * R_; ++i) {
+      conf->add_pos_pattern_counter(pos_pattern_counter_[i]);
+    }
   }
   return true;
 }

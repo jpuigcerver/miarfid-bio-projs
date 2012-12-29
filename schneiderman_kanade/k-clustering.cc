@@ -10,10 +10,20 @@
 
 extern std::default_random_engine PRNG;
 
-size_t dhash(const double* v, const size_t d) {
+size_t dhash(const double* v, const size_t n) {
   static std::hash<std::string> str_hash;
-  std::string s((const char*)v, sizeof(double) * d);
+  std::string s((const char*)v, sizeof(double) * n);
   return str_hash(s);
+}
+
+std::string print_vec(const double *v, const size_t n) {
+  std::string s;
+  for (size_t i = 0; i < n; ++i) {
+    char buff[20];
+    snprintf(buff, sizeof(buff), "%f ", v[i]);
+    s+= buff;
+  }
+  return s;
 }
 
 KClustering::KClustering()
@@ -52,6 +62,9 @@ void KClustering::clear_points() {
     delete [] centroid_counter_;
     centroid_counter_ = NULL;
   }
+  for (double* p: points_) {
+    delete [] p;
+  }
   points_.clear();
 }
 
@@ -77,32 +90,27 @@ size_t KClustering::assign_centroid(const double* p) const {
   return ci;
 }
 
-size_t KClustering::points_size() const {
-  return points_.size();
-}
-
-void KClustering::add(const double* p) {
+double* KClustering::add(const size_t n) {
+  CHECK_GT(n, 0);
+  double* p = new double[n];
   points_.push_back(p);
+  return p;
 }
 
 void KClustering::train() {
-  DLOG(INFO) << "K-Means clustering training started...";
+  LOG(INFO) << "K-Means clustering training started...";
   CHECK_GT(K_, 0);
   CHECK_GT(D_, 0);
   CHECK_GE(points_.size(), K_);
   // Init centroids to random points
-  DLOG(INFO) << "Initializing centroids...";
   if (centroids_ != NULL) { delete [] centroids_; }
   centroids_ = new double[K_ * D_];
   if (centroid_counter_ != NULL) { delete [] centroid_counter_; }
   centroid_counter_ = new size_t[K_];
-  //std::random_shuffle(points_.begin(), points_.end(), UniformDist());
-  for (size_t c = 0; c < K_; ++c) {
+  std::random_shuffle(points_.begin(), points_.end(), UniformDist());
+  for (size_t c = 0, p = 0; c < K_; ++c, p += points_.size() / K_) {
     double* cv = centroids_ + c * D_;
-    memcpy(cv, points_[c], sizeof(double) * D_);
-#ifndef NDEBUG
-    DLOG(INFO) << "Centroid " << c << " hash = " << dhash(cv, D_);
-#endif
+    memcpy(cv, points_[p], sizeof(double) * D_);
   }
   // Assign all points to the first centroid
   if (assigned_centroids_ != NULL) { delete [] assigned_centroids_; }
@@ -111,6 +119,7 @@ void KClustering::train() {
   // K-means clustering
   while (assign_centroids()) {
     compute_centroids();
+    LOG(INFO) << "K-Means clustering error = " << J();
   }
 }
 
@@ -152,7 +161,8 @@ bool KClustering::assign_centroids() {
   for (size_t i = 0; i < points_.size(); ++i) {
     const size_t ci = assign_centroid(points_[i]);
     if (ci != assigned_centroids_[i]) {
-      DLOG(INFO) << "Data point changed its cluster.";
+      DLOG(INFO) << "Data point " << i << " changed its cluster ("
+                 << assigned_centroids_[i] << " -> " << ci << ").";
       move = true;
       assigned_centroids_[i] = ci;
     }
@@ -161,7 +171,7 @@ bool KClustering::assign_centroids() {
 }
 
 bool KClustering::load(const KClusteringConfig& conf) {
-  DLOG(INFO) << "Loading K-Means clustering...";
+  LOG(INFO) << "Loading K-Means clustering...";
   K_ = conf.k();
   CHECK_GT(K_, 0);
   D_ = conf.d();
@@ -173,17 +183,27 @@ bool KClustering::load(const KClusteringConfig& conf) {
   clear();
   centroids_ = new double[K_ * D_];
   memcpy(centroids_, conf.centroid().data(), sizeof(double) * K_ * D_);
-  DLOG(INFO) << "K-Means centroids loaded";
   return true;
 }
 
 bool KClustering::save(KClusteringConfig* conf) const {
-  DLOG(INFO) << "Saving K-Means clustering...";
+  LOG(INFO) << "Saving K-Means clustering...";
   CHECK_NOTNULL(conf);
   conf->clear_centroid();
-  conf->mutable_centroid()->Reserve(K_ * D_);
-  memcpy(conf->mutable_centroid()->mutable_data(), centroids_,
-         sizeof(double) * K_ * D_);
-  DLOG(INFO) << "K-Means centroids saved";
+  conf->set_k(K_);
+  conf->set_d(D_);
+  for (size_t i = 0; i < K_ * D_; ++i) {
+    conf->add_centroid(centroids_[i]);
+  }
   return true;
+}
+
+double KClustering::J() const {
+  double j = 0.0;
+  for (size_t i = 0; i < points_.size(); ++i) {
+    const double* p = points_[i];
+    const double* cp = centroids_ + assigned_centroids_[i] * D_;
+    j += eucl_dist(p, cp);
+  }
+  return j;
 }

@@ -1,6 +1,6 @@
-CXX_FLAGS=-std=c++0x -Wall -pedantic `Magick++-config  --cppflags` -I./ -g
-LD_FLAGS=-lgflags -lglog -lblas -lprotobuf `Magick++-config --ldflags --libs` -g
-BINARIES=sk-train
+CXX_FLAGS=-std=c++0x -Wall -pedantic `Magick++-config  --cppflags` -I./ -DNDEBUG -O3
+LD_FLAGS=-lgflags -lglog -lblas -lprotobuf `Magick++-config --ldflags --libs`
+BINARIES=sk-train sk-test
 
 all: prot $(BINARIES)
 
@@ -24,6 +24,19 @@ sk-train.o: sk-train.cc
 
 sk-train: sk-train.o dataset.o utils.o sk-model.o k-clustering.o \
 	protos/sk-model.pb.o protos/k-clustering.pb.o
+	$(CXX) -o $@ $^  $(LD_FLAGS)
+
+sk-test.o: sk-test.cc
+	$(CXX) -c $< $(CXX_FLAGS)
+
+sk-test: sk-test.o dataset.o utils.o sk-model.o k-clustering.o \
+	protos/sk-model.pb.o protos/k-clustering.pb.o
+	$(CXX) -o $@ $^  $(LD_FLAGS)
+
+test-clustering.o: test-clustering.cc
+	$(CXX) -c $< $(CXX_FLAGS)
+
+test-clustering: test-clustering.o utils.o k-clustering.o protos/k-clustering.pb.o
 	$(CXX) -o $@ $^  $(LD_FLAGS)
 
 clean:
