@@ -1,6 +1,10 @@
 #include <gmm.h>
 
+#ifdef __APPLE__
+#include <Accelerate/Accelerate.h>
+#else
 #include <cblas.h>
+#endif
 #include <glog/logging.h>
 #include <string.h>
 #include <random>
@@ -127,13 +131,48 @@ void GMM::init_em(const double* data, const size_t n) {
   }
   // Initialize component's covariance
   if (t == DIAG_INDP || t == DIAG_COMM) {
-    memset(S, 0x00, sizeof(double) * d);
+    compute_variance(data, n, d, S);
+    for (size_t i = 1; t == DIAG_INDP && i < c; ++i) {
+      memcpy(S + i * d, S, sizeof(double) * d);
+    }
+  } else {
+    compute_covariance(data, n, d, S);
+    for (size_t i = 1; t == FULL_INDP && i < c; ++i) {
+      memcpy(S + i * d * d, S, sizeof(double) * d);
+    }
+  }
+}
 
+double GMM::pdf_k(const double* x, const size_t n, const size_t k) const {
+  const double* mu_k = m + k * d;
+  const double* s_k = S;
+  switch (t) {
+    case FULL_INDP:
+      s_k = S + k * d * d;
+      break;
+    case FULL_COMM:
+      s_k = S;
+      break;
+    case DIAG_INDP:
+      s_k = S + k * d;
+      break;
+    case DIAG_COMM:
+      break;
   }
 }
 
 void GMM::train(const double* data, const size_t n, const size_t dim,
                 const size_t comp, const gmm_type_t type) {
   reserve(dim, comp, type);
-  
+  init_em(data, n);
+  double* px = new double[n * c];
+  for (size_t it = 1; it <= max_iters; ++it) {
+    // E-step
+    for (size_t i = 0; i < n; ++i) {
+      for (size_t k = 0; k < c; ++c) {
+        px[i * c + k] = ;
+      }
+    }
+    // M-step
+  }
 }

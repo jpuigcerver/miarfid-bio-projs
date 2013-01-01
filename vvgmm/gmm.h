@@ -8,10 +8,10 @@ class GMM {
   typedef enum {FULL_INDP = 0, FULL_COMM, DIAG_INDP, DIAG_COMM} gmm_type_t;
   GMM();
   ~GMM();
-  void clear();
   void train(const double* data, const size_t n, const size_t dim,
              const size_t comp, const gmm_type_t type);
   double test(const double* data) const;
+  double pdf_k(const double* data, const size_t n, const size_t k) const;
 
  private:
   gmm_type_t t;  // GMM Type
@@ -21,6 +21,7 @@ class GMM {
   size_t c;  // Number of components
   size_t d;  // Data size
 
+  void clear();
   void reserve(const size_t dim, const size_t comp, const gmm_type_t type);
   void init_em(const double* data, const size_t n);
 };
