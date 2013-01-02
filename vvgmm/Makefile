@@ -4,7 +4,7 @@ ifeq ($(UNAME), Darwin)
 LD_CBLAS=-framework accelerate
 endif
 ifeq ($(UNAME), Linux)
-LD_CBLAS=-lcblas
+LD_CBLAS=-lblas
 endif
 
 CXX_FLAGS=-std=c++0x -Wall -pedantic -I.
