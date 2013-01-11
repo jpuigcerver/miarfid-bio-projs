@@ -292,7 +292,6 @@ int main(int argc, char** argv) {
   google::ParseCommandLineFlags(&argc, &argv, true);
   // Initialize Image Magick
   InitializeMagick(*argv);
-
   // Prepare input image
   Image i_img;
   try {
