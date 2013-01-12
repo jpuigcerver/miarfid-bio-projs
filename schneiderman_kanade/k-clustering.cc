@@ -1,6 +1,10 @@
 #include <k-clustering.h>
 
+#ifdef __APPLE__
+#include <Accelerate/Accelerate.h>
+#else
 #include <cblas.h>
+#endif
 #include <glog/logging.h>
 #include <utils.h>
 
@@ -62,9 +66,6 @@ void KClustering::clear_points() {
     delete [] centroid_counter_;
     centroid_counter_ = NULL;
   }
-  for (double* p: points_) {
-    delete [] p;
-  }
   points_.clear();
 }
 
@@ -90,11 +91,8 @@ size_t KClustering::assign_centroid(const double* p) const {
   return ci;
 }
 
-double* KClustering::add(const size_t n) {
-  CHECK_GT(n, 0);
-  double* p = new double[n];
-  points_.push_back(p);
-  return p;
+void KClustering::add(const double* v) {
+  points_.push_back(v);
 }
 
 void KClustering::train() {

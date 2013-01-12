@@ -123,7 +123,6 @@ bool Dataset::load(const std::string& filename) {
     data_.push_back(Image(face, dat));
     if (face) { data_faces.push_back(&data_.back()); }
     else { data_nfaces.push_back(&data_.back()); }
-    
   }
   if (ferror(fp)) {
     LOG(ERROR) << "Dataset \"" << filename << "\": Error reading file.";

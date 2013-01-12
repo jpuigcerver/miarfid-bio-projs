@@ -5,11 +5,16 @@ import "k-clustering.proto";
 message SKModelConfig {
     required uint64 img_w = 1;
     required uint64 img_h = 2;
-    required uint64 reg_w = 3;
-    required uint64 reg_h = 4;
-    optional KClusteringConfig clustering = 5;
-    optional double thres = 6;
-    repeated uint64 total_counter = 7;
-    repeated uint64 pattern_counter = 8;
-    repeated uint64 pos_pattern_counter = 9;
+    required uint64 reg_w = 3 [default = 5];
+    required uint64 reg_h = 4 [default = 5];
+    required uint64 stp_w = 5 [default = 5];
+    required uint64 stp_h = 6 [default = 5];
+    required uint64 d = 7 [default = 10];
+    optional KClusteringConfig clustering = 8;
+    optional double thres = 9;
+    repeated uint64 total_counter = 10;
+    repeated uint64 pattern_counter = 11;
+    repeated uint64 pos_pattern_counter = 12;
+    repeated double eigenvalues = 13;
+    repeated double eigenvectors = 14;
 }

@@ -1,5 +1,6 @@
 #include <sk-model.h>
 
+#include <defines.h>
 #include <fcntl.h>
 #include <glog/logging.h>
 #include <google/protobuf/text_format.h>
@@ -8,27 +9,41 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <algorithm>
+#include <vector>
+
 using google::protobuf::io::FileInputStream;
 using google::protobuf::io::FileOutputStream;
 using google::protobuf::TextFormat;
 
+extern void pca(const double*, const size_t, const size_t, const size_t,
+                double*, double*, double*);
+extern void pca_reduce(const double* x, const double* z, const size_t n,
+                       const size_t d, const size_t d2, double* xr);
+
 SKModel::SKModel()
-    : img_w_(0), img_h_(0), reg_w_(0), reg_h_(0),
-      R_(0), K_(0), clustering_(NULL), pattern_counter_(NULL),
+    : img_w_(0), img_h_(0), reg_w_(0), reg_h_(0), stp_w_(0), stp_h_(0),
+      R_(0), D_(0), K_(0), eigenvalues_(NULL), eigenvectors_(NULL),
+      clustering_(NULL), pattern_counter_(NULL),
       pos_pattern_counter_(NULL), thres_(0.0) {
 }
 
 SKModel::SKModel(const size_t img_w, const size_t img_h, const size_t reg_w,
-                 const size_t reg_h, const size_t K)
+                 const size_t reg_h, const size_t stp_w, const size_t stp_h,
+                 const size_t D, const size_t K)
     : img_w_(img_w), img_h_(img_h), reg_w_(reg_w), reg_h_(reg_h),
-      K_(K), clustering_(NULL), pattern_counter_(NULL),
+      stp_w_(stp_w), stp_h_(stp_h), D_(D), K_(K), eigenvalues_(NULL),
+      eigenvectors_(NULL), clustering_(NULL), pattern_counter_(NULL),
       pos_pattern_counter_(NULL), thres_(0.0) {
   CHECK_GT(reg_w_, 0);
   CHECK_GT(reg_h_, 0);
   CHECK_GT(img_w_, 0);
   CHECK_GT(img_h_, 0);
+  CHECK_GT(stp_w_, 0);
+  CHECK_GT(stp_h_, 0);
+  CHECK_GT(D_, 0);
   CHECK_GT(K_, 0);
-  R_ = (img_w_ / reg_w_) * (img_h_ / reg_h_);
+  R_ = ((img_w_ - reg_w_) / stp_w_ + 1) * ((img_h_ - reg_h_) / stp_h_ + 1);
   CHECK_GT(R_, 0);
 }
 
@@ -36,30 +51,58 @@ SKModel::~SKModel() {
   clear();
 }
 
-void SKModel::test(Dataset::Image* img) const {
-  CHECK_GT(reg_w_, 0);
-  CHECK_GT(reg_h_, 0);
+double SKModel::score(const Dataset::Image& img) const {
   CHECK_GT(img_w_, 0);
   CHECK_GT(img_h_, 0);
+  CHECK_GT(reg_w_, 0);
+  CHECK_GT(reg_h_, 0);
+  CHECK_GT(stp_w_, 0);
+  CHECK_GT(stp_h_, 0);
   CHECK_GT(K_, 0);
   CHECK_GT(R_, 0);
-  double log_p_img_face = 0.0, log_p_img_nface = 0.0;
-  double* region = new double[reg_w_ * reg_h_];
-  for (size_t y0 = 0, pos = 0; y0 + reg_h_ <= img_h_; y0 += reg_h_) {
-    for (size_t x0 = 0; x0 + reg_w_ <= img_w_; x0 += reg_w_, ++pos) {
-      img->window(x0, y0, reg_w_, reg_h_, img_w_, img_h_, region);
-      const size_t q = clustering_->assign_centroid(region);
-      const double log_p_pos_reg_face =
-          log(pos_pattern_counter_[K_ * R_ + q * R_ + pos]) -
-          log(total_counter_[1]);
-      const double log_p_pos_reg_nface =
-          log(pattern_counter_[q]) - log(total_counter_[0]) - log(R_);
-      log_p_img_face += log_p_pos_reg_face;
-      log_p_img_nface += log_p_pos_reg_nface;
+  CHECK_NOTNULL(eigenvalues_);
+  CHECK_NOTNULL(eigenvectors_);
+  CHECK_NOTNULL(clustering_);
+  // Extract subregions
+  const size_t orig_D = reg_w_ * reg_h_;
+  double* subregions = new double[R_ * orig_D];
+  for (size_t y0 = 0, sr = 0; y0 + reg_h_ <= img_h_; y0 += reg_h_) {
+    for (size_t x0 = 0; x0 + reg_w_ <= img_w_; x0 += reg_w_, ++sr) {
+      double* subregion = subregions + sr * orig_D;
+      img.window(x0, y0, reg_w_, reg_h_, img_w_, img_h_, subregion);
     }
   }
-  img->face = (log_p_img_face - log_p_img_nface) > thres_;
-  delete [] region;
+  // Perform PCA on the subregions, using the training eigenvectors
+  double* subregions_pca = subregions;
+  if (D_ < orig_D) {
+    subregions_pca = new double[R_ * D_];
+    pca_reduce(subregions, eigenvectors_, R_, orig_D, D_, subregions_pca);
+    // Original data is not needed any more
+    delete [] subregions;
+  }
+  // Compute scores for the classes face and nface
+  double log_p_img_face = 0.0, log_p_img_nface = 0.0;
+  for (size_t sr = 0; sr < R_; ++sr) {
+    const double* subregion = subregions_pca + sr * D_;
+    const size_t q = clustering_->assign_centroid(subregion);
+    const double log_p_pos_reg_face =
+        log(pos_pattern_counter_[K_ * R_ + q * R_ + sr]) -
+        log(total_counter_[1]);
+    const double log_p_pos_reg_nface =
+        log(pattern_counter_[q]) - log(total_counter_[0]) - log(R_);
+    log_p_img_face += log_p_pos_reg_face;
+    log_p_img_nface += log_p_pos_reg_nface;
+  }
+  if (subregions != subregions_pca) {
+    delete [] subregions_pca;
+  }
+  delete [] subregions;
+  return (log_p_img_face - log_p_img_nface);
+}
+
+void SKModel::test(Dataset::Image* img) const {
+  double sc = score(*img);
+  img->face = (sc > thres_);
 }
 
 void SKModel::test(Dataset* test_data) const {
@@ -70,36 +113,81 @@ void SKModel::test(Dataset* test_data) const {
 }
 
 float SKModel::test(const Dataset& test_data) const {
+  // Make a copy of the dataset & predict labels
   Dataset test2(test_data);
   test(&test2);
-  size_t errors = 0;
+  // Compute statistics
+  size_t fp = 0, fn = 0, tp = 0, tn = 0;
   for (size_t i = 0; i < test_data.data().size(); ++i) {
-    if (test_data.data()[i].face != test2.data()[i].face) {
-      ++errors;
+    if (test_data.data()[i].face == 1 && test2.data()[i].face == 0) {
+      fn = fn + 1;
+    } else if (test_data.data()[i].face == 0 && test2.data()[i].face == 1) {
+      fp = fp + 1;
+    } else if (test_data.data()[i].face == 0 && test2.data()[i].face == 0) {
+      tn = tn + 1;
+    } else {
+      tp = tp + 1;
     }
   }
-  return errors / static_cast<float>(test_data.data().size());
+  const double fnr = fn / static_cast<double>(test_data.faces().size());
+  const double fpr = fp / static_cast<double>(test_data.nfaces().size());
+  const double pre = (tp + fp > 0 ? tp / static_cast<double>(tp + fp) : 1);
+  const double rec = tp / static_cast<double>(tp + fn);
+  const double acc = (tp + tn) / static_cast<double>(test_data.data().size());
+  LOG(INFO) << "th = " << thres_ << ", tp = " << tp
+            << ", fn = " << fn << ", tn = " << tn << ", fp = " << fp
+            << ", fpr = " << fpr << ", fnr = " << fnr << ", pre = " << pre
+            << ", rec = " << rec << ", acc = " << acc
+            << ", err = " << 1.0 - acc;
+  return 1 - acc;
 }
 
-void SKModel::train(const Dataset& train_data, const Dataset& valid_data) {
+float SKModel::train(const Dataset& train_data, const Dataset& valid_data) {
   LOG(INFO) << "SKModel training started...";
   CHECK_GT(img_w_, 0);
   CHECK_GT(img_h_, 0);
   CHECK_GT(reg_w_, 0);
   CHECK_GT(reg_h_, 0);
+  CHECK_GT(stp_w_, 0);
+  CHECK_GT(stp_h_, 0);
   CHECK_GT(K_, 0);
   CHECK_GT(R_, 0);
-  // Prepare pattern prototypes
-  if (clustering_ != NULL) { delete clustering_; }
-  clustering_ = new KClustering(K_, reg_w_ * reg_h_);
-  for (size_t i = 0; i < train_data.data().size(); ++i) {
+  // Number of training images
+  const size_t ndata = train_data.data().size();
+  // Total number of subregions extracted from all images
+  const size_t n_tot_sr = ndata * R_;
+  // Original dimensionality of each subregion
+  const size_t orig_D = reg_w_ * reg_h_;
+  // Extract all the subregions that will be used for training
+  double* subregions_data = new double [n_tot_sr * orig_D];
+  for (size_t i = 0, sr = 0; i < ndata; ++i) {
     const Dataset::Image& img = train_data.data()[i];
-    for (size_t y = 0; y + reg_h_ <= img_h_; y += reg_h_) {
-      for (size_t x = 0; x + reg_w_ <= img_w_; x += reg_w_) {
-        img.window(x, y, reg_w_, reg_h_, img_w_, img_h_,
-                   clustering_->add(reg_w_ * reg_h_));
+    for (size_t y = 0; y + reg_h_ <= img_h_; y += stp_h_) {
+      for (size_t x = 0; x + reg_w_ <= img_w_; x += stp_w_, ++sr) {
+        double* subregion = subregions_data + sr * orig_D;
+        img.window(x, y, reg_w_, reg_h_, img_w_, img_h_, subregion);
       }
     }
+  }
+  // Perform PCA on the training data (only if D_ < orig_D)
+  double* subregions_pca = subregions_data;
+  if (D_ < orig_D) {
+    if (eigenvalues_ != NULL) { delete [] eigenvalues_; }
+    if (eigenvectors_ != NULL) { delete [] eigenvectors_; }
+    eigenvalues_ = new double[D_];
+    eigenvectors_ = new double[orig_D * D_];
+    double* subregions_pca = new double[n_tot_sr * D_];
+    pca(subregions_data, n_tot_sr, orig_D, D_, eigenvalues_, eigenvectors_,
+        subregions_pca);
+    // Original subregions are not needed anymore
+    delete [] subregions_data;
+  }
+  // Quantize subregions
+  if (clustering_ != NULL) { delete clustering_; }
+  clustering_ = new KClustering(K_, D_);
+  for (size_t sr = 0; sr < n_tot_sr; ++sr) {
+    const double* subregion = subregions_pca + sr * D_;
+    clustering_->add(subregion);
   }
   // Train the clusters with all the patterns
   clustering_->train();
@@ -118,23 +206,59 @@ void SKModel::train(const Dataset& train_data, const Dataset& valid_data) {
   pos_pattern_counter_ = new size_t[2 * K_ * R_];
   memset(pos_pattern_counter_, 0x00, sizeof(size_t) * 2 * K_ * R_);
   // Count cases
-  double* region = new double[reg_h_ * reg_w_];
-  for (size_t i = 0; i < train_data.data().size(); ++i) {
-    const Dataset::Image& img = train_data.data()[i];
-    for (size_t y0 = 0, pos = 0; y0 + reg_h_ <= img_h_; y0 += reg_h_) {
-      for (size_t x0 = 0; x0 + reg_w_ <= img_w_; x0 += reg_w_, ++pos) {
-        img.window(x0, y0, reg_w_, reg_h_, img_w_, img_h_, region);
-        const size_t q = clustering_->assign_centroid(region);
-        const size_t f = img.face ? 1 : 0;
-        ++total_counter_[f];
-        ++pattern_counter_[f * K_ + q];
-        ++pos_pattern_counter_[f * K_ * R_ + q * R_ + pos];
-      }
+  for (size_t sr = 0; sr < n_tot_sr; ++sr) {
+    const size_t img_id = sr / R_;
+    const size_t pos_id = sr % R_;
+    const double* subregion = subregions_pca + sr * D_;
+    const size_t q = clustering_->assign_centroid(subregion);
+    const size_t f = train_data.data()[img_id].face ? 1 : 0;
+    ++total_counter_[f];
+    ++pattern_counter_[f * K_ + q];
+    ++pos_pattern_counter_[f * K_ * R_ + q * R_ + pos_id];
+  }
+  // Choose threshold
+  std::vector<std::pair<double, bool> > scores;
+  for (const Dataset::Image& img : valid_data.data()) {
+    scores.push_back(std::pair<double, bool>(score(img), img.face));
+  }
+  std::sort(scores.begin(), scores.end());
+  const size_t num_faces = valid_data.faces().size();
+  const size_t num_nfaces = valid_data.nfaces().size();
+  size_t fp = num_nfaces, fn = 0, tp = num_faces, tn = 0;
+  double best_acc = 0.0;
+  thres_ = scores[0].first;
+  for (size_t i = 0; i < scores.size(); ++i) {
+    if (scores[i].second) {
+      fn = fn + 1;
+      tp = tp - 1;
+    } else {
+      fp = fp - 1;
+      tn = tn + 1;
+    }
+    if (i < scores.size() - 1 && scores[i].first == scores[i+1].first) {
+      continue;
+    }
+    const double fnr = fn / static_cast<double>(valid_data.faces().size());
+    const double fpr = fp / static_cast<double>(valid_data.nfaces().size());
+    const double pre = (tp + fp > 0 ? tp / static_cast<double>(tp + fp) : 1);
+    const double rec = tp / static_cast<double>(tp + fn);
+    const double acc = (tp + tn) / static_cast<double>(
+        valid_data.data().size());
+    LOG(INFO) << "th = " << scores[i].first << ", tp = " << tp
+              << ", fn = " << fn << ", tn = " << tn << ", fp = " << fp
+              << ", fpr = " << fpr << ", fnr = " << fnr << ", pre = " << pre
+              << ", rec = " << rec << ", acc = " << acc
+              << ", err = " << 1.0 - acc;
+    if (best_acc < acc) {
+      best_acc = acc;
+      thres_ = scores[i].first;
     }
   }
-  delete [] region;
-  // Choose threshold
-  thres_ = log(train_data.nfaces().size()) - log(train_data.faces().size());
+  if (subregions_data != subregions_pca) {
+    delete [] subregions_pca;
+  }
+  delete [] subregions_data;
+  return 1 - best_acc;
 }
 
 bool SKModel::load(const SKModelConfig& conf) {
@@ -148,12 +272,29 @@ bool SKModel::load(const SKModelConfig& conf) {
   CHECK_GT(reg_w_, 0);
   reg_h_ = conf.reg_h();
   CHECK_GT(reg_h_, 0);
-  R_ = (img_w_ / reg_w_) * (img_h_ / reg_h_);
+  stp_w_ = conf.stp_w();
+  CHECK_GT(stp_w_, 0);
+  stp_h_ = conf.stp_h();
+  CHECK_GT(stp_h_, 0);
+  R_ = ((img_w_ - reg_w_) / stp_w_ + 1) * ((img_h_ - reg_h_) / stp_h_ + 1);
   CHECK_GT(R_, 0);
-  if (conf.has_clustering()) {    
+  D_ = conf.d();
+  CHECK_GT(D_, 0);
+  CHECK_LE(D_, reg_w_ * reg_h_);
+  if (conf.has_clustering()) {
     clustering_ = new KClustering;
     clustering_->load(conf.clustering());
     K_ = clustering_->K();
+    CHECK_EQ(D_, clustering_->D());
+  }
+  if (static_cast<size_t>(conf.eigenvalues_size()) == D_) {
+    eigenvalues_ = new double[D_];
+    memcpy(eigenvalues_, conf.eigenvalues().data(), sizeof(double) * D_);
+  }
+  if (static_cast<size_t>(conf.eigenvectors_size()) == D_ * reg_w_ * reg_h_) {
+    eigenvectors_ = new double[reg_w_ * reg_h_ * D_];
+    memcpy(eigenvectors_, conf.eigenvectors().data(),
+           sizeof(double) * D_ * reg_w_ * reg_h_);
   }
   if (conf.total_counter_size() == 2) {
     total_counter_[0] = conf.total_counter(0);
@@ -182,6 +323,9 @@ bool SKModel::save(SKModelConfig* conf) const {
   conf->set_img_h(img_h_);
   conf->set_reg_w(reg_w_);
   conf->set_reg_h(reg_h_);
+  conf->set_stp_w(stp_w_);
+  conf->set_stp_h(stp_h_);
+  conf->set_d(D_);
   conf->set_thres(thres_);
   if (clustering_ != NULL) {
     clustering_->save(conf->mutable_clustering());
@@ -196,6 +340,16 @@ bool SKModel::save(SKModelConfig* conf) const {
   if (pos_pattern_counter_ != NULL) {
     for (size_t i = 0; i < 2 * K_ * R_; ++i) {
       conf->add_pos_pattern_counter(pos_pattern_counter_[i]);
+    }
+  }
+  if (eigenvalues_ != NULL) {
+    for (size_t i = 0; i < D_; ++i) {
+      conf->add_eigenvalues(eigenvalues_[i]);
+    }
+  }
+  if (eigenvectors_ != NULL) {
+    for (size_t i = 0; i < D_ * reg_w_ * reg_h_; ++i) {
+      conf->add_eigenvectors(eigenvectors_[i]);
     }
   }
   return true;
@@ -242,6 +396,14 @@ bool SKModel::save(std::string& filename) const {
 }
 
 void SKModel::clear() {
+  if (eigenvalues_ != NULL) {
+    delete [] eigenvalues_;
+    eigenvalues_ = NULL;
+  }
+  if (eigenvectors_ != NULL) {
+    delete [] eigenvectors_;
+    eigenvectors_ = NULL;
+  }
   if (clustering_ != NULL) {
     delete clustering_;
     clustering_ = NULL;
@@ -279,6 +441,9 @@ void SKModel::image_size(const size_t img_w, const size_t img_h) {
   CHECK_GT(img_h, 0);
   img_w_ = img_w;
   img_h_ = img_h;
+  if (stp_w_ > 0 && stp_h_ > 0) {
+    R_ = ((img_w_ - reg_w_) / stp_w_ + 1) * ((img_h_ - reg_h_) / stp_h_ + 1);
+  }
 }
 
 void SKModel::region_size(size_t* reg_w, size_t* reg_h) const {
@@ -293,4 +458,22 @@ void SKModel::region_size(const size_t reg_w, const size_t reg_h) {
   CHECK_GT(reg_h, 0);
   reg_w_ = reg_w;
   reg_h_ = reg_h;
+  if (stp_w_ > 0 && stp_h_ > 0) {
+    R_ = ((img_w_ - reg_w_) / stp_w_ + 1) * ((img_h_ - reg_h_) / stp_h_ + 1);
+  }
+}
+
+void SKModel::step_size(size_t* stp_w, size_t* stp_h) const {
+  CHECK_NOTNULL(stp_w);
+  CHECK_NOTNULL(stp_h);
+  *stp_w = stp_w_;
+  *stp_h = stp_h_;
+}
+
+void SKModel::step_size(const size_t stp_w, const size_t stp_h) {
+  CHECK_GT(stp_w, 0);
+  CHECK_GT(stp_h, 0);
+  stp_w_ = stp_w;
+  stp_h_ = stp_h;
+  R_ = ((img_w_ - reg_w_) / stp_w_ + 1) * ((img_h_ - reg_h_) / stp_h_ + 1);
 }
