@@ -1,8 +1,8 @@
-#include <stdio.h>
-#include <Magick++.h>
 #include <glog/logging.h>
 #include <google/gflags.h>
 #include <math.h>
+#include <Magick++.h>
+#include <stdio.h>
 
 #include <algorithm>
 
@@ -42,6 +42,7 @@ void dxx(double* x, const size_t n) {
   }
 }
 
+#ifndef NDEBUG
 void image_statistics(const double* im, size_t w, size_t h,
                       size_t x0, size_t y0, double* mean, double* stddev) {
   double sum = 0.0f;
@@ -62,6 +63,7 @@ void image_statistics(const double* im, size_t w, size_t h,
   CHECK_EQ(std::isnan(*mean), 0);
   CHECK_EQ(std::isnan(*stddev), 0);
 }
+#endif
 
 void normalize(const double* i_pxls, const size_t w, const size_t h,
                const bool color, double* o_pxls) {
@@ -100,14 +102,6 @@ void normalize(const double* i_pxls, const size_t w, const size_t h,
       for (size_t x0 = 0; x0 + FLAGS_w <= w; x0 += FLAGS_s) {
         const size_t ym = y0 + FLAGS_w - 1;
         const size_t xm = x0 + FLAGS_w - 1;
-#ifndef NDEBUG
-        double mean_slow, std_slow;
-        image_statistics(i_pxls + k * n, w, h, x0, y0, &mean_slow, &std_slow);
-        DLOG(INFO) << "mean_slow(" << k << "," << y0 << "," << x0 <<") = "
-                   << mean_slow;
-        DLOG(INFO) << "std_slow(" << k << "," << y0 << "," << x0 <<") = "
-                   << std_slow;
-#endif
         const double mean_im = (
             im_ii[k * n + ym * w + xm] +
             (y0 > 0 && x0 > 0 ? im_ii[k * n + (y0 - 1) * w + (x0 - 1)] : 0) -
@@ -122,14 +116,10 @@ void normalize(const double* i_pxls, const size_t w, const size_t h,
         CHECK_GE(var_im, 0.0f);
         const double std_im = sqrt(var_im);
 #ifndef NDEBUG
-        DLOG(INFO) << "mean_im(" << k << "," << y0 << "," << x0 <<") = "
-                   << mean_im;
-        DLOG(INFO) << "var_im(" << k << "," << y0 << "," << x0 <<") = "
-                   << var_im;
-        DLOG(INFO) << "std_im(" << k << "," << y0 << "," << x0 <<") = "
-                   << std_im;
-        CHECK_NEAR(mean_slow, mean_im, 1E-6);
-        CHECK_NEAR(std_slow, std_im, 1E-6);
+        double mean_slow, std_slow;
+        image_statistics(i_pxls + k * n, w, h, x0, y0, &mean_slow, &std_slow);
+        DCHECK_NEAR(mean_slow, mean_im, 1E-6);
+        DCHECK_NEAR(std_slow, std_im, 1E-6);
 #endif
         // Standarize window
         for (size_t y = y0; y <= ym; ++y) {

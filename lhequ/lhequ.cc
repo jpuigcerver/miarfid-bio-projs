@@ -1,4 +1,3 @@
-#include <defines.h>
 #include <glog/logging.h>
 #include <google/gflags.h>
 #include <math.h>
