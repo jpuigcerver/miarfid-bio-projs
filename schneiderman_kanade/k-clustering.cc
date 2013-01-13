@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <numeric>
 #include <random>
 
 extern std::default_random_engine PRNG;
@@ -106,7 +107,7 @@ void KClustering::train() {
   if (centroid_counter_ != NULL) { delete [] centroid_counter_; }
   centroid_counter_ = new size_t[K_];
   std::random_shuffle(points_.begin(), points_.end(), UniformDist());
-  for (size_t c = 0, p = 0; c < K_; ++c, p += points_.size() / K_) {
+  for (size_t c = 0, p = 0; c < K_; ++c, p += (points_.size() / K_)) {
     double* cv = centroids_ + c * D_;
     memcpy(cv, points_[p], sizeof(double) * D_);
   }
@@ -115,9 +116,23 @@ void KClustering::train() {
   assigned_centroids_ = new size_t[points_.size()];
   memset(assigned_centroids_, 0x00, sizeof(size_t) * points_.size());
   // K-means clustering
-  while (assign_centroids()) {
+  const size_t history = 10;
+  double err_history[history];
+  double mean_error_past_hist = INFINITY;
+  for(size_t iter = 1; assign_centroids(); ++iter) {
     compute_centroids();
-    LOG(INFO) << "K-Means clustering error = " << J();
+    const double err = log10(J());
+    LOG(INFO) << "Iter. " << iter << ", K-Means clustering error = " << err
+              << ", Past history error = " << mean_error_past_hist;
+    err_history[(iter - 1) % history] = err;
+    if ((iter - 1) % history == 0 && iter > 1) {
+      const double mean_error_curr_hist = std::accumulate(
+          err_history, err_history + history, 0.0) / history;
+      if (mean_error_curr_hist > mean_error_past_hist) {
+        break;
+      }
+      mean_error_past_hist = mean_error_curr_hist;
+    }
   }
 }
 
@@ -145,6 +160,14 @@ double KClustering::eucl_dist(const double* a, const double* b) const {
   double* aux = new double[D_];
   // aux = a
   memcpy(aux, a, sizeof(double) * D_);
+  /*for (size_t i = 0; i < D_; ++i) {
+    fprintf(stderr, "%10e ", a[i]);
+  }
+  fprintf(stderr, "\n");
+  for (size_t i = 0; i < D_; ++i) {
+    fprintf(stderr, "%10e ", b[i]);
+  }
+  fprintf(stderr, "\n");*/
   // aux = aux - b
   cblas_daxpy(D_, -1.0, b, 1, aux, 1);
   // 2-norm(a - b)
@@ -181,6 +204,10 @@ bool KClustering::load(const KClusteringConfig& conf) {
   clear();
   centroids_ = new double[K_ * D_];
   memcpy(centroids_, conf.centroid().data(), sizeof(double) * K_ * D_);
+  for (size_t c = 0; c < K_; ++c) {
+    const double* centroid = centroids_ + c * D_;
+    DLOG(INFO) << "Centroid " << c << " hash = " << dhash(centroid, D_);
+  }
   return true;
 }
 

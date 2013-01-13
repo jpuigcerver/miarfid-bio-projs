@@ -6,7 +6,7 @@
 #include <glog/logging.h>
 #include <string.h>
 
-extern "C" void dsyevx( char* jobz, char* range, char* uplo, int* n, double* a,
+extern "C" void dsyevx_(char* jobz, char* range, char* uplo, int* n, double* a,
                         int* lda, double* vl, double* vu, int* il, int* iu,
                         double* abstol, int* m, double* w, double* z, int* ldz,
                         double* work, int* lwork, int* iwork, int* ifail,
@@ -54,12 +54,12 @@ void pca(const double* x, const size_t n, const size_t d, const size_t d2,
   int* ifail = new int[d];
   // Allocate optimal workspace
   lwork = -1;
-  dsyevx(&jobz, &range, &uplo, &d_int, cov, &d_int, &vl, &vu, &il, &iu,
+  dsyevx_(&jobz, &range, &uplo, &d_int, cov, &d_int, &vl, &vu, &il, &iu,
          &abstol, &m, w, z, &d_int, &wkopt, &lwork, iwork, ifail, &info);
   CHECK(info == 0) << "PCA failed to allocate optimal workspace.";
   lwork = (int)wkopt;
   double* work = new double[lwork];
-  dsyevx(&jobz, &range, &uplo, &d_int, cov, &d_int, &vl, &vu, &il, &iu,
+  dsyevx_(&jobz, &range, &uplo, &d_int, cov, &d_int, &vl, &vu, &il, &iu,
          &abstol, &m, w, z, &d_int, work, &lwork, iwork, ifail, &info);
   CHECK(info == 0) << "PCA failed to compute eigen-decomposition.";
   // Reduced data

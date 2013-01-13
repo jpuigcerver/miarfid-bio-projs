@@ -85,6 +85,11 @@ void Dataset::clear() {
   data_nfaces.clear();
 }
 
+void Dataset::clear_sets() {
+  data_faces.clear();
+  data_nfaces.clear();
+}
+
 bool Dataset::load(const std::string& filename) {
   clear();
   FILE * fp = fopen(filename.c_str(), "r");
@@ -120,9 +125,7 @@ bool Dataset::load(const std::string& filename) {
       LOG(ERROR) << "Dataset \"" << filename << "\": Data size is zero.";
       return false;
     }
-    data_.push_back(Image(face, dat));
-    if (face) { data_faces.push_back(&data_.back()); }
-    else { data_nfaces.push_back(&data_.back()); }
+    add(face, dat);
   }
   if (ferror(fp)) {
     LOG(ERROR) << "Dataset \"" << filename << "\": Error reading file.";
@@ -132,4 +135,11 @@ bool Dataset::load(const std::string& filename) {
   DLOG(INFO) << "Dataset \"" << filename << "\": " << data_.size()
              << " images in the dataset (" << data_faces.size() << " faces).";
   return true;
+}
+
+
+void Dataset::add(bool face, const std::vector<double>& img) {
+  data_.push_back(Image(face, img));
+  if (face) { data_faces.push_back(&data_.back()); }
+  else { data_nfaces.push_back(&data_.back()); }
 }

@@ -27,11 +27,14 @@ class Dataset {
   Dataset(const Dataset& other);
   ~Dataset();
   void clear();
+  void clear_sets();
   bool load(const std::string& filename);
-
+  void add(bool face, const std::vector<double>& img);
   inline std::vector<Image>& data() { return data_; }
   inline const std::vector<Image>& data() const { return data_; }
+  inline std::vector<Image*>& faces() { return data_faces; }
   inline const std::vector<Image*>& faces() const { return data_faces; }
+  inline std::vector<Image*>& nfaces() { return data_nfaces; }
   inline const std::vector<Image*>& nfaces() const { return data_nfaces; }
 
  private:

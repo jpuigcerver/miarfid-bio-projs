@@ -15,5 +15,5 @@ if [ ! -f $2 ]; then
     exit 1
 fi
 
-awk '{print 0, $0}' $2
 awk '{print 1, $0}' $1
+awk '{print 0, $0}' $2
