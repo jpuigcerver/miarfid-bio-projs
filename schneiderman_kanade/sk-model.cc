@@ -510,14 +510,15 @@ std::string SKModel::info() const {
   std::string msg;
   char buff[50];
   msg += "SKModel info:\n";
-  sprintf(buff, "%u\n", img_w_);
-  sprintf(buff, "img_w = %u, img_h = %u\n", img_w_, img_h_);
+  sprintf(buff, "%u\n", (uint32_t)(img_w_));
+  sprintf(buff, "img_w = %u, img_h = %u\n", (uint32_t)img_w_, (uint32_t)img_h_);
   msg += buff;
-  sprintf(buff, "reg_w = %u, reg_h = %u\n", reg_w_, reg_h_);
+  sprintf(buff, "reg_w = %u, reg_h = %u\n", (uint32_t)reg_w_, (uint32_t)reg_h_);
   msg += buff;
-  sprintf(buff, "stp_x = %u, stp_y = %u\n", stp_x_, stp_y_);
+  sprintf(buff, "stp_x = %u, stp_y = %u\n", (uint32_t)stp_x_, (uint32_t)stp_y_);
   msg += buff;
-  sprintf(buff, "R = %u, D = %u, K = %u\n", R_, D_, K_);
+  sprintf(buff, "R = %u, D = %u, K = %u\n",
+          (uint32_t)R_, (uint32_t)D_, (uint32_t)K_);
   msg += buff;
   sprintf(buff, "theshold = %f\n", thres_);
   msg += buff;

@@ -9,7 +9,7 @@ endif
 
 CXX_FLAGS=-std=c++0x -Wall -pedantic -I./ -DNDEBUG -O3
 LD_FLAGS=-lgflags -lglog -lprotobuf $(LD_OS)
-BINARIES=sk-train sk-test sk-detector normalize-img
+BINARIES=sk-train sk-test sk-detect normalize-img
 
 all: prot $(BINARIES)
 
@@ -45,10 +45,10 @@ sk-test: sk-test.o dataset.o utils.o sk-model.o k-clustering.o pca.o \
 pca.o: pca.cc
 	$(CXX) -c $< $(CXX_FLAGS)
 
-sk-detector.o: sk-detector.cc
+sk-detect.o: sk-detect.cc
 	$(CXX) -c $< $(CXX_FLAGS) `Magick++-config --cxxflags`
 
-sk-detector: sk-detector.o dataset.o utils.o sk-model.o k-clustering.o \
+sk-detect: sk-detect.o dataset.o utils.o sk-model.o k-clustering.o \
 	pca.o protos/sk-model.pb.o protos/k-clustering.pb.o
 	$(CXX) -o $@ $^ $(LD_FLAGS) `Magick++-config --ldflags --libs`
 

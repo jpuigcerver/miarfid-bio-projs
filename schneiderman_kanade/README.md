@@ -2,7 +2,8 @@ schneiderman_kanade
 ===================
 
 Face detector based on the Schneiderman & Kanade technique for objects
-detection.
+detection. Includes a set of tools to train and test faces vs. non-faces datasets
+and a face detector that can be used with many image formats, thanks to Magick++.
 
 Tools
 -----
@@ -28,11 +29,12 @@ Requirements
 
 Help
 ----
+ * **sk-train**
     Usage:
       ./sk-train -train training_data -valid validation_data \
         -img_w img_w -img_h img_h -reg_w subregion_w -reg_h subregion_h
 
-    Other interesting flags:
+    Interesting flags:
       -d (Reduce regions dimensionality to d) type: uint64 default: 10
       -img_h (Training images height) type: uint64 default: 0
       -img_w (Training images width) type: uint64 default: 0
@@ -52,3 +54,33 @@ Help
         default: 0.3
       -fnr (Desired FPR. Only used when optimize = fixed_fpr) type: double
         default: 0.3
+
+ * **sk-test**
+    Usage:
+      ./sk-test -test test_data -mfile trained_model
+
+    Interesting flags:
+      -mfile (File containing the trained model.) type: string default: ""
+      -seed (Seed for the random engine) type: uint64 default: 0
+      -test (File containing the test set) type: string default: ""
+
+ * **sk-detect**
+    Usage:
+      ./sk-detect -m trained_model -i Lenna.png -o Lenna_faces.png
+
+    Interesting flags:
+      -display (Display output image) type: bool default: false
+      -i (Input image. If '-', standard input.) type: string default: "-"
+      -m (Schneiderman & Kanade model file) type: string default: ""
+      -max_scale (Maximum scaling factor) type: double default: 1
+      -min_scale (Minimum scaling factor (may be superseded)) type: double
+        default: 0
+      -o (Output image) type: string default: ""
+      -scales (Number of times image is scaled) type: uint64 default: 10
+      -step_x (Window step in x direction) type: uint64 default: 1
+      -step_y (Window step in y direction) type: uint64 default: 1
+
+All the previous tools support the flags introduced by glog and gflags, the
+most interesting one is probably `-logtostderr` which will show a detailed
+log of the execution of the given tool. Simply use `-help` to show all the flags
+supported by any given tool.
