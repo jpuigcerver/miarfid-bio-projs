@@ -6,21 +6,20 @@
 #include <glog/logging.h>
 #include <string.h>
 
+// Use lapack
 extern "C" void dsyevx_(char* jobz, char* range, char* uplo, int* n, double* a,
                         int* lda, double* vl, double* vu, int* il, int* iu,
                         double* abstol, int* m, double* w, double* z, int* ldz,
                         double* work, int* lwork, int* iwork, int* ifail,
-                        int* info );
+                        int* info);
 
-// x[i] = x[i] ^ 2
-void dxsq(const size_t N, double* x, const size_t incX) {
-  for (size_t i = 0; i < N; ++i, x += incX) {
-    *x *= *x;
-  }
-}
-
+// x: original data.
+// n: number of data points.
+// d: original dimensionality.
+// d2: output dimensionality.
 // w: eigenvalues. Sorted in ascending order.
 // z: one eigenvector each row. Sorted in ascending order of w.
+// xr: output data.
 void pca(const double* x, const size_t n, const size_t d, const size_t d2,
          double* w, double* z, double* xr) {
   double* mean = new double[d];
@@ -74,6 +73,12 @@ void pca(const double* x, const size_t n, const size_t d, const size_t d2,
   delete [] X;
 }
 
+// x: original data.
+// z: one eigenvector each row.
+// n: number of data points.
+// d: original dimensionality.
+// d2: output dimensionality.
+// xr: output data.
 void pca_reduce(const double* x, const double* z, const size_t n,
                 const size_t d, const size_t d2, double* xr) {
   CHECK_NOTNULL(x);

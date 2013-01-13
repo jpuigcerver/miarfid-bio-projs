@@ -1,5 +1,5 @@
 CXX_FLAGS=-std=c++0x -Wall -pedantic `Magick++-config  --cppflags` -I./ \
--O3 -DNDEBUG
+-DNDEBUG -O3
 LD_FLAGS=-lgflags -lglog `Magick++-config --ldflags --libs`
 BINARIES=lhequ
 

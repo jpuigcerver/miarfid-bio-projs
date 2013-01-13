@@ -1,8 +1,9 @@
-#include <stdio.h>
-#include <Magick++.h>
+#include <defines.h>
 #include <glog/logging.h>
 #include <google/gflags.h>
 #include <math.h>
+#include <Magick++.h>
+#include <stdio.h>
 
 #include <algorithm>
 
@@ -15,78 +16,63 @@ DEFINE_uint64(s, 1, "Pixel step.");
 
 void histogram(const Quantum* img, const size_t w, const size_t h,
                const size_t x0, const size_t y0, const size_t win_w,
-               const size_t win_h, uint32_t* hist, Quantum* minv) {
+               const size_t win_h, uint32_t* hist) {
   CHECK_NOTNULL(hist);
   // Compute histogram
-  memset(hist, 0x00, sizeof(uint32_t) * (MaxRGB + 1));
-  *minv = MaxRGB;
+  memset(hist, 0x00, sizeof(uint32_t) * 256);
+  const double f = 256.0 / MaxRGB;
   for (size_t y = y0; y < y0 + win_h; ++y) {
     for (size_t x = x0; x < x0 + win_w; ++x) {
       const size_t i = y * w + x;
-      ++hist[img[i]];
-      if (img[i] < *minv) {
-        *minv = img[i];
-      }
+      const uint32_t px = (uint32_t)(img[i] * f);
+      ++hist[px];
     }
   }
   // Compute cumulative histogram
-#ifndef NDEBUG
-  if (hist[0] != 0) {
-    DLOG(INFO) << "hist(0) = " << hist[0];
-  }
-#endif
-  for (size_t i = 1; i <= MaxRGB; ++i) {
+  for (size_t i = 1; i <= 256; ++i) {
     hist[i] += hist[i - 1];
-#ifndef NDEBUG
-    if (hist[i] != hist[i - 1]) {
-      DLOG(INFO) << "hist(" << i << ") = " << hist[i];
-    }
-#endif
   }
 }
 
 void equalization(const Quantum* i_pxls, const size_t channels, const size_t w,
                   const size_t h, Quantum* o_pxls) {
   CHECK_NOTNULL(o_pxls);
+  const double f = 256.0 / MaxRGB;
   const size_t n = w * h;
-  uint32_t* hist = new uint32_t[MaxRGB + 1];
-  uint32_t* auxout = new uint32_t[n];
+  uint32_t* hist = new uint32_t[256];
+  double* auxout = new double[n];
   uint32_t* counter = new uint32_t[n];
   for (size_t c = 0; c < channels; ++c) {
-    memset(auxout, 0x00, sizeof(uint32_t) * n);
-    memset(counter, 0x00, sizeof(uint32_t) * channels * n);
+    memset(auxout, 0x00, sizeof(double) * n);
+    memset(counter, 0x00, sizeof(uint32_t) * n);
     for (size_t y0 = 0; y0 < h; y0 += FLAGS_s) {
       const size_t win_h = std::min<size_t>(FLAGS_w, h - y0);
       for (size_t x0 = 0; x0 < w; x0 += FLAGS_s) {
         const size_t win_w = std::min<size_t>(FLAGS_w, w - x0);
-        const size_t wa = win_h * win_w;
         const size_t ym = y0 + win_h - 1;
         const size_t xm = x0 + win_w - 1;
-        DLOG(INFO) << "Window: " << " " << y0 << " " << x0
-                   << " " << ym << " " << xm;
         // Compute local histogram
-        Quantum minv;
-        histogram(i_pxls, w, h, x0, y0, win_w, win_h, hist, &minv);
+        histogram(i_pxls, w, h, x0, y0, win_w, win_h, hist);
+        uint32_t h_wind = std::min(y0, std::min(h-y0+1, win_h));
+        uint32_t v_wind = std::min(x0, std::min(w-x0+1, win_w));
+        counter[y0 * w + x0] = h_wind*v_wind;
         for (size_t y = y0; y <= ym; ++y) {
           for (size_t x = x0; x <= xm; ++x) {
             const size_t i = y * w + x;
-            const uint32_t hi = hist[i_pxls[c * n + i]];
-            const uint32_t hm = hist[minv];
-            const uint32_t npx = static_cast<uint32_t>(round(
-                MaxRGB * static_cast<double>(hi - hm) / (wa - hm)));
-            DLOG(INFO) << "npx(" << c << "," << i << ") = " << npx;
+            const uint32_t px = (uint32_t)round(i_pxls[c * n + i] * f);
+            const uint32_t hi = hist[px];
+            const double npx = hi / static_cast<double>(win_w * win_h);
             auxout[i] += npx;
-            ++counter[i];
           }
         }
         if (win_w < FLAGS_w) { break; }
       }
       if (win_h < FLAGS_w) { break; }
     }
+    // Normalize accumulated windows
     for (size_t i = 0; i < n; ++i) {
-      o_pxls[c * n + i] = static_cast<uint32_t>(round(
-          static_cast<double>(auxout[i]) / (counter[i] > 0 ? counter[i] : 1)));
-      DLOG(INFO) << "out(" << c << "," << i << ") = " << o_pxls[c * n + i];
+      const double fc = 1.0 / (counter[i] > 0 ? counter[i] : 1.0);
+      o_pxls[c * n + i] = MaxRGB * (auxout[i] * fc);
     }
   }
 }
@@ -144,9 +130,9 @@ int main(int argc, char** argv) {
   }
   const bool color = (i_img.type() != GrayscaleType &&
                       i_img.type() != GrayscaleMatteType);
+  i_img.quantizeColors(256);
   // Prepare output image
   Image o_img(i_img.size(), Color(0, 0, 0));
-  o_img.type(i_img.type());
   o_img.magick(i_img.magick());
   o_img.modifyImage();
   // Image Height and Width
@@ -168,6 +154,7 @@ int main(int argc, char** argv) {
   devectorize_pixels(o_pxls_v, C, W, H, o_pxls);
   try {
     o_img.syncPixels();
+    o_img.quantizeColors(256);
     o_img.write(FLAGS_o);
   } catch (Exception &error) {
     LOG(ERROR) << "Output image write failed: " << error.what();
