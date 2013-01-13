@@ -8,11 +8,10 @@
 
 using namespace Magick;
 
-DEFINE_string(i, "-", "Input image. If none, use standard input.");
-DEFINE_string(o, "-", "Output image. If none, use standard output.");
+DEFINE_string(i, "-", "Input image. Use '-' for standard input.");
+DEFINE_string(o, "-", "Output image. Use '-' for standard output.");
 DEFINE_uint64(w, 5, "Window size for local normalization.");
 DEFINE_uint64(s, 1, "Pixel step.");
-
 
 void integral(const double* pxls, const size_t w, const size_t h, double* ii) {
   CHECK_NOTNULL(pxls);
@@ -147,36 +146,6 @@ void normalize(const double* i_pxls, const size_t w, const size_t h,
   for (size_t i = 0; i < c * n; ++i) {
     o_pxls[i] /= (counter[i] > 0.0 ? counter[i] : 1.0f);
   }
-  /*
-  for (size_t k = 0; k < c; ++k) {
-    // For each window
-    for (size_t y0 = 0; y0 + FLAGS_w <= h; y0 += FLAGS_w) {
-      for (size_t x0 = 0; x0 + FLAGS_w <= w; x0 += FLAGS_w) {
-        const size_t ym = y0 + FLAGS_w - 1;
-        const size_t xm = x0 + FLAGS_w - 1;
-        double minf = INFINITY, maxf = -INFINITY;
-        for (size_t y = y0; y <= ym; ++y) {
-          for (size_t x = x0; x <= xm; ++x) {
-            const size_t i = k * n + y * w + x;
-            minf = std::min(minf, o_pxls[i]);
-            maxf = std::max(maxf, o_pxls[i]);
-          }
-        }
-        const double diff = maxf - minf;
-        for (size_t y = y0; y <= ym; ++y) {
-          for (size_t x = x0; x <= xm; ++x) {
-            const size_t i = k * n + y * w + x;
-            if (diff > 0) {
-              o_pxls[i] = (o_pxls[i] - minf) / diff;
-            } else {
-              o_pxls[i] = 0.0;
-            }
-          }
-        }
-      }
-    }
-  }
-  */
   delete [] counter;
   delete [] sq_ii;
   delete [] im_sq;
@@ -289,6 +258,7 @@ void doubles_to_range_01(double* fpxls, const size_t w, const size_t h, const bo
 int main(int argc, char** argv) {
   // Google tools initialization
   google::InitGoogleLogging(argv[0]);
+  google::SetUsageMessage("Computes the local normalization.");
   google::ParseCommandLineFlags(&argc, &argv, true);
   // Initialize Image Magick
   InitializeMagick(*argv);
