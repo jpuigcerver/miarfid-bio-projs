@@ -10,7 +10,7 @@ using namespace Magick;
 
 DEFINE_string(i, "-", "Input image. Use '-' for standard input.");
 DEFINE_string(o, "-", "Output image. Use '-' for standard output.");
-DEFINE_uint64(w, 5, "Window size for local normalization.");
+DEFINE_uint64(w, 5, "Window size for local equalization.");
 DEFINE_uint64(s, 1, "Pixel step.");
 
 void histogram(const Quantum* img, const size_t w, const size_t h,

@@ -20,5 +20,5 @@ Help
       -i (Input image. Use '-' for standard input.) type: string default: "-"
       -o (Output image. Use '-' for standard output.) type: string default: "-"
       -s (Pixel step.) type: uint64 default: 1
-      -w (Window size for local normalization.) type: uint64 default: 5
+      -w (Window size for local equalization.) type: uint64 default: 5
 
