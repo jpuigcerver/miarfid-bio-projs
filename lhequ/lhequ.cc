@@ -8,8 +8,8 @@
 
 using namespace Magick;
 
-DEFINE_string(i, "-", "Input image. If none, use standard input.");
-DEFINE_string(o, "-", "Output image. If none, use standard output.");
+DEFINE_string(i, "-", "Input image. Use '-' for standard input.");
+DEFINE_string(o, "-", "Output image. Use '-' for standard output.");
 DEFINE_uint64(w, 5, "Window size for local normalization.");
 DEFINE_uint64(s, 1, "Pixel step.");
 
@@ -122,6 +122,7 @@ void devectorize_pixels(const Quantum* pxls_v, const size_t channels,
 int main(int argc, char** argv) {
   // Google tools initialization
   google::InitGoogleLogging(argv[0]);
+  google::SetUsageMessage("Computes the local histogram equalization.");
   google::ParseCommandLineFlags(&argc, &argv, true);
   // Initialize Image Magick
   InitializeMagick(*argv);
@@ -141,7 +142,8 @@ int main(int argc, char** argv) {
         "and TrueColor. Same types with opacity also supported.";
     return 1;
   }
-  const bool color = (i_img.type() != GrayscaleType && i_img.type() != GrayscaleMatteType);
+  const bool color = (i_img.type() != GrayscaleType &&
+                      i_img.type() != GrayscaleMatteType);
   // Prepare output image
   Image o_img(i_img.size(), Color(0, 0, 0));
   o_img.type(i_img.type());
@@ -156,7 +158,7 @@ int main(int argc, char** argv) {
   const size_t N = C * W * H;
   // Pointer to input image pixels
   const PixelPacket* i_pxls = i_img.getConstPixels(0, 0, W, H);
-  
+
   Quantum* i_pxls_v = new Quantum[N];
   vectorize_pixels(i_pxls, C, W, H, i_pxls_v);
   Quantum* o_pxls_v = new Quantum[N];
