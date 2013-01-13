@@ -147,9 +147,7 @@ void pixels_to_doubles(
     const PixelPacket* pxls, const size_t w, const size_t h,
     const bool color, double* fpxls) {
   const size_t n = w * h;
-  const size_t ch_bytes = sizeof(pxls[0].red);
-  const size_t max_ch_value = (1L << (8L * ch_bytes)) - 1;
-  const double scale_ratio = 1.0f / max_ch_value;
+  const double scale_ratio = 1.0f / MaxRGB;
   if (color) {
     for (size_t i = 0; i < n; ++i) {
       fpxls[i] = pxls[i].red * scale_ratio;
@@ -166,21 +164,16 @@ void pixels_to_doubles(
 void doubles_to_pixels(const double* fpxls, const size_t w, const size_t h,
                       const bool color, PixelPacket* pxls) {
   const size_t n = w * h;
-  const size_t ch_bytes = sizeof(pxls[0].red);
-  const size_t max_ch_value = (1L << (8L * ch_bytes)) - 1;
   if (color) {
     for (size_t i = 0; i < n; ++i) {
-      pxls[i].red = static_cast<Quantum>(
-          round(fpxls[i] * max_ch_value));
-      pxls[i].green = static_cast<Quantum>(
-          round(fpxls[n + i] * max_ch_value));
-      pxls[i].blue = static_cast<Quantum>(
-          round(fpxls[n + n + i] * max_ch_value));
+      pxls[i].red = static_cast<Quantum>(round(fpxls[i] * MaxRGB));
+      pxls[i].green = static_cast<Quantum>(round(fpxls[n + i] * MaxRGB));
+      pxls[i].blue = static_cast<Quantum>(round(fpxls[n + n + i] * MaxRGB));
     }
   } else {
     for (size_t i = 0; i < n; ++i) {
-      pxls[i].red = pxls[i].green = pxls[i].blue = static_cast<Quantum>(
-          fpxls[i] * max_ch_value);
+      pxls[i].red = pxls[i].green = pxls[i].blue =
+          static_cast<Quantum>(fpxls[i] * MaxRGB);
     }
   }
 }
@@ -268,10 +261,11 @@ int main(int argc, char** argv) {
         "and TrueColor. Same types with opacity also supported.";
     return 1;
   }
-  const bool color = (i_img.type() != GrayscaleType && i_img.type() != GrayscaleMatteType);
+  const bool color = (i_img.type() != GrayscaleType &&
+                      i_img.type() != GrayscaleMatteType);
+  i_img.quantizeColors(256);
   // Prepare output image
   Image o_img(i_img.size(), Color(0, 0, 0));
-  o_img.type(i_img.type());
   o_img.magick(i_img.magick());
   o_img.modifyImage();
   // Image Height and Width
@@ -293,6 +287,7 @@ int main(int argc, char** argv) {
   doubles_to_pixels(o_pxls_flt, W, H, color, o_pxls);
   try {
     o_img.syncPixels();
+    o_img.quantizeColors(256);
     o_img.write(FLAGS_o);
   } catch (Exception &error) {
     LOG(ERROR) << "Output image write failed: " << error.what();
