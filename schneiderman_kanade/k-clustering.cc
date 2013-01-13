@@ -97,7 +97,8 @@ void KClustering::add(const double* v) {
 }
 
 void KClustering::train() {
-  LOG(INFO) << "K-Means clustering training started...";
+  LOG(INFO) << "K-Means clustering training started ("
+            << points_.size() << " data points)...";
   CHECK_GT(K_, 0);
   CHECK_GT(D_, 0);
   CHECK_GE(points_.size(), K_);
@@ -160,14 +161,6 @@ double KClustering::eucl_dist(const double* a, const double* b) const {
   double* aux = new double[D_];
   // aux = a
   memcpy(aux, a, sizeof(double) * D_);
-  /*for (size_t i = 0; i < D_; ++i) {
-    fprintf(stderr, "%10e ", a[i]);
-  }
-  fprintf(stderr, "\n");
-  for (size_t i = 0; i < D_; ++i) {
-    fprintf(stderr, "%10e ", b[i]);
-  }
-  fprintf(stderr, "\n");*/
   // aux = aux - b
   cblas_daxpy(D_, -1.0, b, 1, aux, 1);
   // 2-norm(a - b)

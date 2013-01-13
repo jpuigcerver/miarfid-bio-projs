@@ -38,17 +38,18 @@ size_t Dataset::Image::hash() const {
 void Dataset::Image::window(const size_t x0, const size_t y0,
                             const size_t w, const size_t h,
                             const size_t img_w, const size_t img_h,
-                            double* region) const {
+                            double* win) const {
   CHECK_GT(w, 0);
   CHECK_GT(h, 0);
   CHECK_GT(img_w, 0);
   CHECK_GT(img_h, 0);
   CHECK_LE(y0 + h, img_h);
   CHECK_LE(x0 + w, img_w);
-  CHECK_NOTNULL(region);
+  CHECK_LE(w * h, size);
+  CHECK_NOTNULL(win);
   for (size_t y = y0; y < y0 + h; ++y) {
     const double* img_row = img + y * img_w + x0;
-    double* win_row = region + (y - y0) * w;
+    double* win_row = win + (y - y0) * w;
     memcpy(win_row, img_row, sizeof(double) * w);
   }
 }
@@ -134,6 +135,7 @@ bool Dataset::load(const std::string& filename) {
   fclose(fp);
   DLOG(INFO) << "Dataset \"" << filename << "\": " << data_.size()
              << " images in the dataset (" << data_faces.size() << " faces).";
+  delete [] buff;
   return true;
 }
 

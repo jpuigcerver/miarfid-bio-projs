@@ -71,24 +71,24 @@ double SKModel::score(const Dataset::Image& img) const {
   // Extract subregions
   const size_t orig_D = reg_w_ * reg_h_;
   double* subregions = new double[R_ * orig_D];
-  for (size_t y0 = 0, sr = 0; y0 + reg_h_ <= img_h_; y0 += reg_h_) {
-    for (size_t x0 = 0; x0 + reg_w_ <= img_w_; x0 += reg_w_, ++sr) {
+  for (size_t y0 = 0, sr = 0; y0 + reg_h_ <= img_h_; y0 += stp_y_) {
+    for (size_t x0 = 0; x0 + reg_w_ <= img_w_; x0 += stp_x_, ++sr) {
       double* subregion = subregions + sr * orig_D;
       img.window(x0, y0, reg_w_, reg_h_, img_w_, img_h_, subregion);
     }
   }
   // Perform PCA on the subregions, using the training eigenvectors
-  double* subregions_pca = subregions;
   if (D_ < orig_D) {
-    subregions_pca = new double[R_ * D_];
+    double* subregions_pca = new double[R_ * D_];
     pca_reduce(subregions, eigenvectors_, R_, orig_D, D_, subregions_pca);
     // Original data is not needed any more
     delete [] subregions;
+    subregions = subregions_pca;
   }
   // Compute scores for the classes face and nface
   double log_p_img_face = 0.0, log_p_img_nface = 0.0;
   for (size_t sr = 0; sr < R_; ++sr) {
-    const double* subregion = subregions_pca + sr * D_;
+    const double* subregion = subregions + sr * D_;
     const size_t q = clustering_->assign_centroid(subregion);
     const double log_p_pos_reg_face =
         log(pos_pattern_counter_[K_ * R_ + q * R_ + sr]) -
@@ -98,11 +98,7 @@ double SKModel::score(const Dataset::Image& img) const {
     log_p_img_face += log_p_pos_reg_face;
     log_p_img_nface += log_p_pos_reg_nface;
   }
-  if (subregions != subregions_pca) {
-    delete [] subregions_pca;
-  } else {
-    delete [] subregions;
-  }
+  delete [] subregions;
   const double sc = (log_p_img_face - log_p_img_nface);
   DLOG(INFO) << "img hash = " << img.hash() << ", score = " << sc;
   return sc;
@@ -147,7 +143,7 @@ void SKModel::test(Dataset* test_data, std::vector<double>* scores) const {
   }
 }
 
-float SKModel::test(const Dataset& test_data) const {
+double SKModel::test(const Dataset& test_data) const {
   // Make a copy of the dataset & predict labels
   Dataset test2(test_data);
   test(&test2);
@@ -175,6 +171,32 @@ float SKModel::test(const Dataset& test_data) const {
             << ", rec = " << rec << ", acc = " << acc
             << ", err = " << 1.0 - acc;
   return 1 - acc;
+}
+
+double SKModel::dscore(const Dataset& test_data) const {
+  double sum[2] = {0.0, 0.0};
+  double sq_sum[2] = {0.0, 0.0};
+  size_t finite[2] = {0, 0};
+  for (const Dataset::Image& img : test_data.data()) {
+    const double sc = score(img);
+    if (std::isfinite(sc)) {
+      const size_t f = img.face ? 1 : 0;
+      sum[f] += sc;
+      sq_sum[f] += sc * sc;
+      ++finite[f];
+    }
+  }
+  if (finite[0] == 0 || finite[1] == 0) {
+    LOG(WARNING) << "All samples from one class have a infinity score.";
+    return INFINITY;
+  }
+  const double avg_nface = sum[0] / finite[0];
+  const double avg_face = sum[1] / finite[1];
+  const double var_nface =
+      sq_sum[0] / finite[0] - avg_nface * avg_nface;
+  const double var_face =
+      sq_sum[1] / finite[1] - avg_face * avg_face;
+  return (avg_face - avg_nface) / sqrt(var_face + var_nface);
 }
 
 void SKModel::train(const Dataset& train_data, const Dataset& valid_data) {
@@ -205,24 +227,24 @@ void SKModel::train(const Dataset& train_data, const Dataset& valid_data) {
     }
   }
   // Perform PCA on the training data (only if D_ < orig_D)
-  double* subregions_pca = subregions_data;
   if (D_ < orig_D) {
     LOG(INFO) << "PCA dimensionality reduction from " << orig_D << " to " << D_;
     if (eigenvalues_ != NULL) { delete [] eigenvalues_; }
     if (eigenvectors_ != NULL) { delete [] eigenvectors_; }
     eigenvalues_ = new double[D_];
     eigenvectors_ = new double[orig_D * D_];
-    subregions_pca = new double[n_tot_sr * D_];
+    double* subregions_pca = new double[n_tot_sr * D_];
     pca(subregions_data, n_tot_sr, orig_D, D_, eigenvalues_, eigenvectors_,
         subregions_pca);
     // Original subregions are not needed anymore
     delete [] subregions_data;
+    subregions_data = subregions_pca;
   }
   // Quantize subregions
   if (clustering_ != NULL) { delete clustering_; }
   clustering_ = new KClustering(K_, D_);
   for (size_t sr = 0; sr < n_tot_sr; ++sr) {
-    const double* subregion = subregions_pca + sr * D_;
+    const double* subregion = subregions_data + sr * D_;
     clustering_->add(subregion);
   }
   // Train the clusters with all the patterns
@@ -245,7 +267,7 @@ void SKModel::train(const Dataset& train_data, const Dataset& valid_data) {
   for (size_t sr = 0; sr < n_tot_sr; ++sr) {
     const size_t img_id = sr / R_;
     const size_t pos_id = sr % R_;
-    const double* subregion = subregions_pca + sr * D_;
+    const double* subregion = subregions_data + sr * D_;
     const size_t q = clustering_->assign_centroid(subregion);
     const size_t f = train_data.data()[img_id].face ? 1 : 0;
     ++total_counter_[f];
@@ -320,11 +342,8 @@ void SKModel::train(const Dataset& train_data, const Dataset& valid_data) {
       LOG(FATAL) << "Unknown optimization criterion: " << FLAGS_optimize;
     }
   }
-  if (subregions_data != subregions_pca) {
-    delete [] subregions_pca;
-  } else {
-    delete [] subregions_data;
-  }
+  thres_ = log(train_data.nfaces().size()) - log(train_data.faces().size());
+  delete [] subregions_data;
 }
 
 bool SKModel::load(const SKModelConfig& conf) {

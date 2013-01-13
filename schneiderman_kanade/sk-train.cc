@@ -49,7 +49,7 @@ int main(int argc, char** argv) {
   SKModel skm(FLAGS_img_w, FLAGS_img_h, FLAGS_reg_w, FLAGS_reg_h,
               FLAGS_stp_x, FLAGS_stp_y, FLAGS_d, FLAGS_k);
   skm.train(tr_data, va_data);
-  printf("Validation error = %f\n", skm.test(va_data));
+  printf("Validation d-score = %f\n", skm.dscore(va_data));
   if (FLAGS_mfile != "") {
     CHECK(skm.save(FLAGS_mfile));
   }

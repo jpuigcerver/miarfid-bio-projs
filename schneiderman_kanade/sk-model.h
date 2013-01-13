@@ -18,12 +18,13 @@ class SKModel {
           const size_t D, const size_t K);
   ~SKModel();
   void train(const Dataset& train_data, const Dataset& valid_data);
-  float test(const Dataset& test_data) const;
+  double test(const Dataset& test_data) const;
   void test(Dataset* test_data) const;
   void test(Dataset* test_data, std::vector<double>* scores) const;
   void test(Dataset::Image* img) const;
   void test(Dataset::Image* img, double* score) const;
   double score(const Dataset::Image& img) const;
+  double dscore(const Dataset& test_data) const;
   bool load(const SKModelConfig& conf);
   bool save(SKModelConfig* conf) const;
   bool load(const std::string& filename);
