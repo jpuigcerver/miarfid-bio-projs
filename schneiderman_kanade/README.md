@@ -30,6 +30,7 @@ Requirements
 Help
 ----
  * **sk-train**
+
         Usage:
           ./sk-train -train training_data -valid validation_data \
             -img_w img_w -img_h img_h -reg_w subregion_w -reg_h subregion_h
@@ -58,6 +59,7 @@ Help
             default: 0.3
 
  * **sk-test**
+
         Usage:
           ./sk-test -test test_data -mfile trained_model
 
@@ -67,6 +69,7 @@ Help
           -test (File containing the test set) type: string default: ""
 
  * **sk-detect**
+
         Usage:
           ./sk-detect -m trained_model -i Lenna.png -o Lenna_faces.png
 
