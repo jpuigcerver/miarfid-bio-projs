@@ -30,46 +30,43 @@ Requirements
 Help
 ----
  * **sk-train**
+        Usage:
+          ./sk-train -train training_data -valid validation_data \
+            -img_w img_w -img_h img_h -reg_w subregion_w -reg_h subregion_h
 
-    Usage:
-      ./sk-train -train training_data -valid validation_data \
-        -img_w img_w -img_h img_h -reg_w subregion_w -reg_h subregion_h
-
-    Interesting flags:
-      -d (Reduce regions dimensionality to d) type: uint64 default: 10
-      -img_h (Training images height) type: uint64 default: 0
-      -img_w (Training images width) type: uint64 default: 0
-      -k (Number of quantized patterns) type: uint64 default: 10
-      -kclustering_threads (Number of threads for K-Clustering algorithm)
-        type: uint64 default: 8
-      -mfile (File where the trained model will be written) type: string
-        default: ""
-      -reg_h (Subregion height) type: uint64 default: 5
-      -reg_w (Subregion width) type: uint64 default: 5
-      -seed (Seed for the random engine) type: uint64 default: 0
-      -stp_x (Step size in x direction) type: uint64 default: 5
-      -stp_y (Step size in y direction) type: uint64 default: 5
-      -train (File containing the training set) type: string default: ""
-      -valid (File containing the validation set) type: string default: ""
-      -optimize (Criterion for threshold. Values: best_acc, fixed_fpr,
-        fixed_fnr.) type: string default: "best_acc"
-      -fnr (Desired FNR. Only used when optimize = fixed_fnr) type: double
-        default: 0.3
-      -fnr (Desired FPR. Only used when optimize = fixed_fpr) type: double
-        default: 0.3
+        Interesting flags:
+          -d (Reduce regions dimensionality to d) type: uint64 default: 10
+          -img_h (Training images height) type: uint64 default: 0
+          -img_w (Training images width) type: uint64 default: 0
+          -k (Number of quantized patterns) type: uint64 default: 10
+          -kclustering_threads (Number of threads for K-Clustering algorithm)
+            type: uint64 default: 8
+          -mfile (File where the trained model will be written) type: string
+            default: ""
+          -reg_h (Subregion height) type: uint64 default: 5
+          -reg_w (Subregion width) type: uint64 default: 5
+          -seed (Seed for the random engine) type: uint64 default: 0
+          -stp_x (Step size in x direction) type: uint64 default: 5
+          -stp_y (Step size in y direction) type: uint64 default: 5
+          -train (File containing the training set) type: string default: ""
+          -valid (File containing the validation set) type: string default: ""
+          -optimize (Criterion for threshold. Values: best_acc, fixed_fpr,
+            fixed_fnr.) type: string default: "best_acc"
+          -fnr (Desired FNR. Only used when optimize = fixed_fnr) type: double
+            default: 0.3
+          -fnr (Desired FPR. Only used when optimize = fixed_fpr) type: double
+            default: 0.3
 
  * **sk-test**
+        Usage:
+          ./sk-test -test test_data -mfile trained_model
 
-    Usage:
-      ./sk-test -test test_data -mfile trained_model
-
-    Interesting flags:
-      -mfile (File containing the trained model.) type: string default: ""
-      -seed (Seed for the random engine) type: uint64 default: 0
-      -test (File containing the test set) type: string default: ""
+        Interesting flags:
+          -mfile (File containing the trained model.) type: string default: ""
+          -seed (Seed for the random engine) type: uint64 default: 0
+          -test (File containing the test set) type: string default: ""
 
  * **sk-detect**
-
         Usage:
           ./sk-detect -m trained_model -i Lenna.png -o Lenna_faces.png
 

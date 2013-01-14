@@ -15,7 +15,7 @@ Help
 ----
     Usage:
       ./lnorm -i Lenna.png -o Lenna_norm.png [-s step] [-w window] [-helpshort]
-
+    
     Options:
       -i (Input image. Use '-' for standard input.) type: string default: "-"
       -o (Output image. Use '-' for standard output.) type: string default: "-"

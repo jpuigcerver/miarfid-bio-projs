@@ -1,8 +1,8 @@
 result_stats
 ============
 
-Utility that, given two score files from Positive and Negative examples, 
-computes different statistics from the classifier. 
+Utility that, given two score files from Positive and Negative examples,
+computes different statistics from the classifier.
 Project proposed in Unit 2. Max. points = 2.5.
 
 Statistics
@@ -15,7 +15,7 @@ Statistics
 * **FPR = FNR**, computes the threshold that gives the smallest difference between FPR and FNR. In case of many minima, obtains the threshold that minimizes FPR + FNR.
 * [**D-Prime**](http://en.wikipedia.org/wiki/D'), computes the separation between the positive and negative scores assuming a Normal distribution. The higher value, the better.
 
-Notes: 
+Notes:
 * **FPR** means [*False Positive Rate*](http://en.wikipedia.org/wiki/False_positive#Type_I_error).
 * **FNR** means [*False Negative Rate*](http://en.wikipedia.org/wiki/False_positive#Type_II_error).
 
@@ -31,7 +31,7 @@ Help
 ----
     Usage:
       ./result_stats.py --pos pfile --neg nfile [--fpr FPR] [--fnr FNR]
-    
+
     Options:
       --help (-h)         Shows this text
       --pos (-p) pfile    Scores file of the possitive examples
