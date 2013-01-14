@@ -80,6 +80,7 @@ def LoadScores(pos_filename, neg_filename):
     f = open(neg_filename, 'r')
     for line in f:
         line = line.split()
+        if len(line) == 0: continue
         scores.append((float(line[-1]), '-'))
     f.close()
     scores.sort()
