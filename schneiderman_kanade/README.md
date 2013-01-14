@@ -39,6 +39,8 @@ Help
       -img_h (Training images height) type: uint64 default: 0
       -img_w (Training images width) type: uint64 default: 0
       -k (Number of quantized patterns) type: uint64 default: 10
+      -kclustering_threads (Number of threads for K-Clustering algorithm)
+        type: uint64 default: 8
       -mfile (File where the trained model will be written) type: string
         default: ""
       -reg_h (Subregion height) type: uint64 default: 5

@@ -89,17 +89,25 @@ double SKModel::score(const Dataset::Image& img) const {
   double log_p_img_face = 0.0, log_p_img_nface = 0.0;
   for (size_t sr = 0; sr < R_; ++sr) {
     const double* subregion = subregions + sr * D_;
-    const size_t q = clustering_->assign_centroid(subregion);
-    const double log_p_pos_reg_face =
-        log(pos_pattern_counter_[K_ * R_ + q * R_ + sr]) -
-        log(total_counter_[1]);
-    const double log_p_pos_reg_nface =
-        log(pattern_counter_[q]) - log(total_counter_[0]) - log(R_);
+    size_t q = clustering_->closest_centroid(subregion);
+    const size_t ppc = pos_pattern_counter_[K_ * R_ + q * R_ + sr];
+    const size_t tc1 = total_counter_[1];
+    const size_t pc = pattern_counter_[q];
+    const size_t tc0 = total_counter_[0];
+    const double log_p_pos_reg_face = ppc > 0 && tc1 > 0 ?
+        log(ppc) - log(tc1) : -INFINITY;
+    const double log_p_pos_reg_nface = pc > 0 && tc0 > 0 ?
+        log(pc) - log(tc0) - log(R_) : -INFINITY;
     log_p_img_face += log_p_pos_reg_face;
     log_p_img_nface += log_p_pos_reg_nface;
   }
   delete [] subregions;
-  const double sc = (log_p_img_face - log_p_img_nface);
+  double sc = 0;
+  if (std::isfinite(log_p_img_face) && std::isfinite(log_p_img_nface)) {
+    sc = (log_p_img_face - log_p_img_nface);
+  } else {
+    sc = -INFINITY;
+  }
   DLOG(INFO) << "img hash = " << img.hash() << ", score = " << sc;
   return sc;
 }
@@ -268,7 +276,7 @@ void SKModel::train(const Dataset& train_data, const Dataset& valid_data) {
     const size_t img_id = sr / R_;
     const size_t pos_id = sr % R_;
     const double* subregion = subregions_data + sr * D_;
-    const size_t q = clustering_->assign_centroid(subregion);
+    const size_t q = clustering_->closest_centroid(subregion);
     const size_t f = train_data.data()[img_id].face ? 1 : 0;
     ++total_counter_[f];
     ++pattern_counter_[f * K_ + q];
@@ -342,7 +350,6 @@ void SKModel::train(const Dataset& train_data, const Dataset& valid_data) {
       LOG(FATAL) << "Unknown optimization criterion: " << FLAGS_optimize;
     }
   }
-  thres_ = log(train_data.nfaces().size()) - log(train_data.faces().size());
   delete [] subregions_data;
 }
 
@@ -403,6 +410,7 @@ bool SKModel::load(const SKModelConfig& conf) {
 
 bool SKModel::save(SKModelConfig* conf) const {
   LOG(INFO) << "Saving SKModel...";
+  LOG(INFO) << info();
   CHECK_NOTNULL(conf);
   conf->Clear();
   conf->set_img_w(img_w_);

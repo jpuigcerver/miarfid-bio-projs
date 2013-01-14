@@ -23,6 +23,9 @@ std::default_random_engine PRNG;
 int main(int argc, char** argv) {
   // Google tools initialization
   google::InitGoogleLogging(argv[0]);
+  google::SetUsageMessage(
+      "Train a model for face detection using Schneiderman & Kanade"
+      " algorithm.");
   google::ParseCommandLineFlags(&argc, &argv, true);
   // Check flags
   CHECK_NE(FLAGS_train, "") << "File containing the training set expected.";
