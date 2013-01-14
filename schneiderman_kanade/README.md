@@ -70,20 +70,20 @@ Help
 
  * **sk-detect**
 
-    Usage:
-      ./sk-detect -m trained_model -i Lenna.png -o Lenna_faces.png
-    
-    Interesting flags:
-      -display (Display output image) type: bool default: false
-      -i (Input image. If '-', standard input.) type: string default: "-"
-      -m (Schneiderman & Kanade model file) type: string default: ""
-      -max_scale (Maximum scaling factor) type: double default: 1
-      -min_scale (Minimum scaling factor (may be superseded)) type: double
-        default: 0
-      -o (Output image) type: string default: ""
-      -scales (Number of times image is scaled) type: uint64 default: 10
-      -step_x (Window step in x direction) type: uint64 default: 1
-      -step_y (Window step in y direction) type: uint64 default: 1
+        Usage:
+          ./sk-detect -m trained_model -i Lenna.png -o Lenna_faces.png
+
+        Interesting flags:
+          -display (Display output image) type: bool default: false
+          -i (Input image. If '-', standard input.) type: string default: "-"
+          -m (Schneiderman & Kanade model file) type: string default: ""
+          -max_scale (Maximum scaling factor) type: double default: 1
+          -min_scale (Minimum scaling factor (may be superseded)) type: double
+            default: 0
+          -o (Output image) type: string default: ""
+          -scales (Number of times image is scaled) type: uint64 default: 10
+          -step_x (Window step in x direction) type: uint64 default: 1
+          -step_y (Window step in y direction) type: uint64 default: 1
 
 All the previous tools support the flags introduced by glog and gflags, the
 most interesting one is probably `-logtostderr` which will show a detailed
