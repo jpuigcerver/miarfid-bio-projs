@@ -72,7 +72,7 @@ Help
 
     Usage:
       ./sk-detect -m trained_model -i Lenna.png -o Lenna_faces.png
-
+    
     Interesting flags:
       -display (Display output image) type: bool default: false
       -i (Input image. If '-', standard input.) type: string default: "-"
