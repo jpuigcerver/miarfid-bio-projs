@@ -29,7 +29,7 @@ Requirements
 
 Help
 ----
- * **sk-train**
+**sk-train**
 
         Usage:
           ./sk-train -train training_data -valid validation_data \
@@ -58,7 +58,7 @@ Help
           -fnr (Desired FPR. Only used when optimize = fixed_fpr) type: double
             default: 0.3
 
- * **sk-test**
+**sk-test**
 
         Usage:
           ./sk-test -test test_data -mfile trained_model
@@ -68,7 +68,7 @@ Help
           -seed (Seed for the random engine) type: uint64 default: 0
           -test (File containing the test set) type: string default: ""
 
- * **sk-detect**
+**sk-detect**
 
         Usage:
           ./sk-detect -m trained_model -i Lenna.png -o Lenna_faces.png
