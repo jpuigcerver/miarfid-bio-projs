@@ -2,16 +2,15 @@
 #include <Accelerate/Accelerate.h>
 #else
 #include <cblas.h>
-#endif
-#include <glog/logging.h>
-#include <string.h>
-
 // Use lapack
 extern "C" void dsyevx_(char* jobz, char* range, char* uplo, int* n, double* a,
                         int* lda, double* vl, double* vu, int* il, int* iu,
                         double* abstol, int* m, double* w, double* z, int* ldz,
                         double* work, int* lwork, int* iwork, int* ifail,
                         int* info);
+#endif
+#include <glog/logging.h>
+#include <string.h>
 
 // x: original data.
 // n: number of data points.

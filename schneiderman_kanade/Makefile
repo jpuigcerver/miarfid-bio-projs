@@ -7,7 +7,7 @@ ifeq ($(UNAME), Linux)
 LD_OS=-lblas -llapack
 endif
 
-CXX_FLAGS=-std=c++0x -Wall -pedantic -I./ -DNDEBUG -O3
+CXX_FLAGS=-std=c++0x -Wall -pedantic -I./ -DNDEBUG -O2
 LD_FLAGS=-lgflags -lglog -lprotobuf $(LD_OS)
 BINARIES=sk-train sk-test sk-detect normalize-img
 

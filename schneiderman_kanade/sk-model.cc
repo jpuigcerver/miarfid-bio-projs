@@ -178,7 +178,7 @@ double SKModel::test(const Dataset& test_data) const {
             << ", fpr = " << fpr << ", fnr = " << fnr << ", pre = " << pre
             << ", rec = " << rec << ", acc = " << acc
             << ", err = " << 1.0 - acc;
-  return 1 - acc;
+  return 1.0 - acc;
 }
 
 double SKModel::dscore(const Dataset& test_data) const {
